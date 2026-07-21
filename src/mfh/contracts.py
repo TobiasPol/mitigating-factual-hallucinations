@@ -46,15 +46,8 @@ class Outcome(StrEnum):
 
 
 class Runtime(StrEnum):
-    TRANSFORMERS = "transformers"
     MLX = "mlx"
-    LLAMA_CPP = "llama.cpp"
     SYNTHETIC = "synthetic"
-
-
-class TransformersModelClass(StrEnum):
-    CAUSAL_LM = "causal_lm"
-    IMAGE_TEXT_TO_TEXT = "image_text_to_text"
 
 
 class ActivationSite(StrEnum):
@@ -109,7 +102,6 @@ class ModelSpec:
     artifact_sha256: str | None = None
     artifact_size_bytes: int | None = None
     candidate_layers: tuple[int, ...] = ()
-    transformers_model_class: TransformersModelClass = TransformersModelClass.CAUSAL_LM
 
     def __post_init__(self) -> None:
         for name in ("name", "repository", "revision", "quantization", "dtype", "role"):
@@ -127,26 +119,10 @@ class ModelSpec:
         if any(layer < 0 or layer >= self.num_layers for layer in candidate_layers):
             raise ConfigurationError(f"candidate_layers must be in [0, {self.num_layers - 1}]")
         object.__setattr__(self, "candidate_layers", candidate_layers)
-        if self.runtime is Runtime.LLAMA_CPP:
-            if not self.artifact or not self.artifact.strip():
-                raise ConfigurationError("llama.cpp models require an exact artifact filename")
-            if self.artifact_sha256 is None or not re.fullmatch(
-                r"[0-9a-f]{64}", self.artifact_sha256
-            ):
-                raise ConfigurationError("llama.cpp models require the artifact SHA-256")
-            if self.artifact_size_bytes is None or self.artifact_size_bytes <= 0:
-                raise ConfigurationError("llama.cpp models require a positive artifact size")
-        elif self.artifact_sha256 is not None and not re.fullmatch(
+        if self.artifact_sha256 is not None and not re.fullmatch(
             r"[0-9a-f]{64}", self.artifact_sha256
         ):
             raise ConfigurationError("artifact_sha256 must be a lowercase SHA-256 digest")
-        if (
-            self.runtime is not Runtime.TRANSFORMERS
-            and self.transformers_model_class is not TransformersModelClass.CAUSAL_LM
-        ):
-            raise ConfigurationError(
-                "transformers_model_class applies only to Transformers checkpoints"
-            )
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 import shutil
 import tempfile
 from collections import Counter
@@ -15,6 +16,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+import numpy as np
 import torch
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -42,7 +44,6 @@ from mfh.evaluation.risk import (
 from mfh.evaluation.transitions import paired_transition_summary
 from mfh.inference.architecture import HookKey, HookMode, HookPoint
 from mfh.inference.hooks import ActivationSession, CapturePolicy, InterventionPlan
-from mfh.inference.runtime import TeacherForcedScore, set_deterministic_seed
 from mfh.methods.adaptive import (
     AdaptiveController,
     AlphaController,
@@ -92,6 +93,27 @@ from mfh.methods.sparse import (
 )
 from mfh.methods.static import CentroidVectorBuilder
 from mfh.provenance import canonical_json, sha256_file, stable_hash
+
+
+@dataclass(frozen=True, slots=True)
+class TeacherForcedScore:
+    response: str
+    token_ids: tuple[int, ...]
+    total_log_likelihood: float
+    mean_log_likelihood: float
+
+
+def set_deterministic_seed(seed: int) -> None:
+    if seed < 0:
+        raise DataValidationError("seed must be non-negative")
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
 
 _PHASES = tuple(f"E{index}" for index in range(11))
 _WARNING = (

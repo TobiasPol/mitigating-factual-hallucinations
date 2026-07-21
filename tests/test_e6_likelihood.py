@@ -142,11 +142,11 @@ class _IntegratedBase(_LikelihoodRuntime):
         super().__init__({"gold": (0.3,), "I don't know.": (0.6,)})
         self.snapshot = snapshot
         self.model_spec = ModelSpec(
-            name="bonsai-27b-mlx-1bit",
-            repository="prism-ml/Bonsai-27B-mlx-1bit",
-            revision="ef22f239c670078e1507f9769bcaa66657332b96",
+            name="qwen3.6-27b-mlx-4bit",
+            repository="mlx-community/Qwen3.6-27B-4bit",
+            revision="c000ac2c2057d94be3fa931000c31723aac53282",
             runtime=Runtime.MLX,
-            quantization="grouped-binary-mlx-1.125bpw",
+            quantization="affine-g64-mlx-4bit",
             num_layers=64,
         )
 
@@ -326,11 +326,11 @@ def test_e6_signed_binding_rejects_runtime_receipt_tampering() -> None:
         phase=ExperimentPhase.E6,
         benchmark="triviaqa",
         partition="T-dev",
-        model_name="bonsai-27b-mlx-1bit",
-        model_repository="prism-ml/Bonsai-27B-mlx-1bit",
-        model_revision="ef22f239c670078e1507f9769bcaa66657332b96",
+        model_name="qwen3.6-27b-mlx-4bit",
+        model_repository="mlx-community/Qwen3.6-27B-4bit",
+        model_revision="c000ac2c2057d94be3fa931000c31723aac53282",
         runtime=Runtime.MLX,
-        quantization="grouped-binary-mlx-1.125bpw",
+        quantization="affine-g64-mlx-4bit",
         model_num_layers=64,
         system_prompt_id=prompt.prompt_id,
         prompt_template_sha256=hashlib.sha256(prompt.text.encode()).hexdigest(),

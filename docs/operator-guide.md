@@ -186,10 +186,8 @@ attention and full-attention blocks. Preserve the
 external resume-chain head for every partial 500-question execution. The model
 process must be released before SAE training or other memory-heavy analysis.
 
-The earlier Gemma, Bonsai, Transformers, AWQ, GGUF, and Colab artifacts remain
-immutable exploratory or pilot provenance. In particular, the completed Bonsai
-E0 and its 17,244/19,800-record partial E1 stay at their original paths. They are
-excluded from all active gates and must not be copied into the Qwen namespace.
+The active workflow requires no legacy-model artifacts. Keep the Qwen namespace
+free of outputs copied from any prior experiment.
 
 Before benchmark splitting:
 

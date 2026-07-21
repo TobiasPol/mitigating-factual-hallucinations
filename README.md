@@ -14,8 +14,7 @@ The software workflow is implemented. The active Qwen scientific experiment has
 not been executed yet. Model-generated phase results, the reviewed language
 suite, the post-E9/E10 human audit, and final scientific reports therefore do not
 exist until the corresponding operator and human steps below are completed.
-Earlier Bonsai, Gemma, GGUF, AWQ, Transformers, CUDA, and Colab artifacts are
-superseded provenance and cannot satisfy an active Qwen gate.
+No legacy-model artifact is part of the active study or required by validation.
 
 This README is the cross-device execution checklist. The much more detailed
 scientific and artifact-level explanation is in
@@ -49,19 +48,10 @@ they do not change the registered scientific schedule.
 The `artifacts/` directory is intentionally ignored by Git. A normal clone is
 not enough: transfer the existing model-independent source, split, contamination,
 and grader artifacts separately, preserving file bytes and permissions. Do not
-copy old Bonsai run directories into the new Qwen study namespace.
+copy prior model runs into the new Qwen study namespace.
 
-A practical transfer is:
-
-```bash
-# Run from the parent directory on the current machine.
-rsync -a --protect-args \
-  mitigating-factual-hallucinations/ \
-  USER@M4_HOST:/ABSOLUTE/PATH/mitigating-factual-hallucinations/
-```
-
-This also transfers ignored pilot models and can be large. To transfer only the
-active inputs, copy the Git working tree plus these paths:
+Transfer only the active inputs by copying the Git working tree plus these
+paths:
 
 ```text
 artifacts/contamination/triviaqa-ood/

@@ -77,7 +77,7 @@ These should remain separate experimental factors. Otherwise, the effects of ada
 
 ## 2.2 Approved local single-model amendment
 
-Colab Free could not sustain the full workflow. A Bonsai/M1 Pro pilot subsequently completed E0 and generated 17,244 of 19,800 E1 records, but it did not complete E1. On 2026-07-17, before any downstream representation learning or confirmatory run, the user explicitly replaced that pilot with `Qwen/Qwen3.6-27B` on an Apple M4 Max with 48 GiB unified memory. The Bonsai files are retained byte-for-byte as superseded pilot provenance and cannot satisfy a Qwen prerequisite or gate. Every new E0–E10 work directory and ledger belongs to the separate `qwen36-27b-mlx4-m4max48-v1` study namespace. The exact decision is frozen in `configs/experiments/model-selection-amendment.json`.
+The approved local experiment uses `Qwen/Qwen3.6-27B` on an Apple M4 Max with 48 GiB unified memory. Every E0–E10 work directory and ledger belongs to the `qwen36-27b-mlx4-m4max48-v1` study namespace. The exact single-model decision is frozen in `configs/experiments/model-selection-amendment.json`; no legacy-model artifact is a prerequisite.
 
 The sole active model is:
 
@@ -89,7 +89,7 @@ The pinned runtime artifact has 64 text blocks, hidden size 5,120, 48 linear-att
 
 The exact model inventory and static runtime requirements are bound by `configs/models/qwen3.6-27b-mlx-4bit.snapshot.json` and `configs/runtimes/qwen3.6-27b-mlx-4bit-policy.json`. The live preflight command freezes the actual machine identity, macOS build, Xcode/Metal toolchain, hook evidence, code hashes, and peak memory in a non-overwritable receipt. The 500-question cohort and contamination-review artifacts are model-independent and remain valid. A new Qwen E0 must complete inside the Qwen namespace before a new E1 is admitted.
 
-Earlier Gemma, Bonsai, Transformers, AWQ, and GGUF runs are retained byte-for-byte as exploratory or pilot provenance but are superseded and excluded from every Qwen scientific gate. The Colab notebook, bundle, and result-import workflow are retired. GGUF deployment replication is outside the current single-model study and may be proposed only as a separately frozen follow-up.
+The Colab notebook, bundle, and result-import workflow are retired. Cross-model and cross-runtime replication are outside the current single-model study and require a separately frozen amendment.
 
 ## 2.3 Scope consequence of using one model
 
@@ -943,7 +943,7 @@ Run this for the sole active model.
 
 The composite M6 is evaluated after selection and is not used for component-level hypothesis tests.
 
-For computational efficiency, develop components on the designated TriviaQA partitions, freeze candidate designs before target-benchmark evaluation, stream activation statistics, and keep the model and SAE training stages out of memory at the same time. Cross-model and GGUF replication are explicitly deferred.
+For computational efficiency, develop components on the designated TriviaQA partitions, freeze candidate designs before target-benchmark evaluation, stream activation statistics, and keep the model and SAE training stages out of memory at the same time. Cross-model and cross-runtime replication are explicitly deferred.
 
 ---
 
@@ -1395,7 +1395,7 @@ For SAE training, create a separately sampled activation corpus and store it in 
 
 ## 17.3 Local execution and memory discipline
 
-The active study has one native MLX runtime. Run one model process at a time, write resumable immutable shards, aggregate centroid statistics online, and release model arrays plus the Metal cache before probe or SAE training. Every long computation must record wall time, peak unified memory, package-lock identity, snapshot digest, and resumable-chain head. GGUF, CUDA, TPU, and Colab evidence are outside this amendment and cannot substitute for the MLX run.
+The active study has one native MLX runtime. Run one model process at a time, write resumable immutable shards, aggregate centroid statistics online, and release model arrays plus the Metal cache before probe or SAE training. Every long computation must record wall time, peak unified memory, package-lock identity, snapshot digest, and resumable-chain head. Evidence from any other runtime cannot substitute for the registered MLX run.
 
 ---
 
@@ -1526,7 +1526,7 @@ Use three levels.
 | Local runtime stress and replay audit      | 22–23 | MLX throughput, memory, and artifact replay     |
 | Statistical analysis and writing          |    24 | Final tables, confidence intervals, paper       |
 
-The approved local version executes only the Qwen 3.6 27B 4-bit MLX checkpoint on the 48 GiB M4 Max. It must stream or aggregate activation statistics and avoid retaining full-token/full-layer activations. The model is unloaded before memory-heavy probe or SAE work. The retained Bonsai pilot and all Colab, CUDA, TPU, Transformers, and GGUF results remain superseded provenance and are not interchangeable evidence.
+The approved local version executes only the Qwen 3.6 27B 4-bit MLX checkpoint on the 48 GiB M4 Max. It must stream or aggregate activation statistics and avoid retaining full-token/full-layer activations. The model is unloaded before memory-heavy probe or SAE work. Results from other models or runtimes are not interchangeable evidence.
 
 ---
 

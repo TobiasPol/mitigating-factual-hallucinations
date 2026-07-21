@@ -62,7 +62,7 @@
   {\usebeamerfont{subtitle}\insertsubtitle\par}
   \vfill
   \begin{beamercolorbox}[rounded=true,sep=0.7em,wd=0.91\textwidth]{progress remaining}
-    \textbf{Current position:} the E0--E10 software, provenance, replay, and analysis path is implemented. The earlier Bonsai pilot is preserved but superseded; live Qwen validation and every Qwen scientific phase remain to be executed.
+    \textbf{Current position:} the E0--E10 software, provenance, replay, and analysis path is implemented; live Qwen validation and every Qwen scientific phase remain to be executed.
   \end{beamercolorbox}
   \vspace{0.4cm}
   {\small\color{Muted}Evidence snapshot: 17 July 2026}
@@ -341,38 +341,6 @@
   {\scriptsize\color{Muted}\textbf{Design choice:} 500 model-independent reserved questions, each generated twice with the exact E1 decoding path.}
 \end{frame}
 
-\begin{frame}{The Bonsai E0 pilot is preserved but superseded}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.72\textwidth}
-      \begin{columns}[T,onlytextwidth]
-        \begin{column}{0.5\textwidth}\metric{500}{questions, each repeated twice}{progress remaining}\end{column}
-        \begin{column}{0.5\textwidth}\metric{0}{determinism mismatches}{progress remaining}\end{column}
-      \end{columns}
-      \vspace{0.2cm}
-      \begin{columns}[T,onlytextwidth]
-        \begin{column}{0.5\textwidth}\metric{13.84}{mean generated tokens/s}{progress remaining}\end{column}
-        \begin{column}{0.5\textwidth}\metric{4.86 GB}{measured peak memory}{progress remaining}\end{column}
-      \end{columns}
-    \end{column}
-    \begin{column}{0.25\textwidth}
-      \begin{beamercolorbox}[rounded=true,sep=0.4em]{progress remaining}
-        \small\textbf{Pilot passed}\par\vspace{0.12cm}
-        \footnotesize
-        \textcolor{Green}{\checkmark}\ checkpoint\par
-        \textcolor{Green}{\checkmark}\ chat template\par
-        \textcolor{Green}{\checkmark}\ deterministic decode\par
-        \textcolor{Green}{\checkmark}\ MLX runtime
-      \end{beamercolorbox}
-    \end{column}
-  \end{columns}
-  \vspace{0.08cm}
-  \begin{beamercolorbox}[rounded=true,sep=0.32em,wd=0.95\textwidth]{progress done}
-    \small\textbf{Meaning:} the old Bonsai/M1 path demonstrated feasibility, but none of these measurements can satisfy a Qwen prerequisite or gate.
-  \end{beamercolorbox}
-  \vspace{0.1cm}
-  {\scriptsize\color{Red}\textbf{Required next evidence:} a new write-once Qwen/M4 Max preflight receipt and a complete Qwen E0 inside the separate study namespace.}
-\end{frame}
-
 \begin{frame}{E1 establishes the prompt-only baseline}
   \small
   \begin{columns}[T,onlytextwidth]
@@ -390,34 +358,6 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{The partial Bonsai E1 cannot be resumed as Qwen evidence}
-  \small
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.62\textwidth}
-      \textbf{17,244 of 19,800 pilot generations are retained byte-for-byte}\par\vspace{0.32cm}
-      \hbox{%
-        \begin{beamercolorbox}[wd=.871\linewidth,ht=2.2ex,dp=0.8ex,center]{progress done}\small 87.1\% superseded pilot\end{beamercolorbox}%
-        \begin{beamercolorbox}[wd=.129\linewidth,ht=2.2ex,dp=0.8ex,center]{progress remaining}\small excluded\end{beamercolorbox}}
-      \vspace{0.48cm}
-      \begin{itemize}\setlength\itemsep{0.12cm}
-        \item append-only rows with a resumable chain head
-        \item condition-major order across all prompt/benchmark cells
-        \item exact checkpoint, split, prompt, runtime, and protocol hashes
-        \item exact hashes are recorded in the model-selection amendment
-        \item Qwen E1 starts from zero after a new Qwen E0 admission
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.34\textwidth}
-      \begin{beamercolorbox}[rounded=true,sep=0.52em]{progress remaining}
-        \textbf{Evidence boundary}\par\vspace{0.25cm}
-        \footnotesize\textcolor{Green}{\bfseries Can claim:} the abandoned pilot has an immutable, identity-bound record.\par\vspace{0.3cm}
-        \textcolor{Red}{\bfseries Cannot claim:} any pilot output is evidence about Qwen or completes E1.
-      \end{beamercolorbox}
-    \end{column}
-  \end{columns}
-  \vspace{0.12cm}
-  {\tiny\color{Muted}Active namespace: \texttt{artifacts/studies/qwen36-27b-mlx4-m4max48-v1}.}
-\end{frame}
 
 \begin{frame}{E2 locates internal factual-outcome separation}
   \small
@@ -497,7 +437,7 @@
     \end{column}
     \begin{column}{0.31\textwidth}
       \textcolor{Blue}{\bfseries Next execution}\par\vspace{0.15cm}
-      Run live M4 Max preflight, Qwen E0, then a fresh Qwen E1. The preserved Bonsai partial E1 is excluded.
+      Run live M4 Max preflight, Qwen E0, then a fresh Qwen E1 in the active namespace.
     \end{column}
     \begin{column}{0.31\textwidth}
       \textcolor{Amber}{\bfseries Evidence boundary}\par\vspace{0.15cm}

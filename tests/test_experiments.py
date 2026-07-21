@@ -643,10 +643,10 @@ class StudyProtocolTests(unittest.TestCase):
                 for name in study.phase("E0").required_inputs
             },
         )
-        gemma, *remaining = contract.conditions
+        first_condition, *remaining = contract.conditions
         drifted = replace(
             contract,
-            conditions=(replace(gemma, model_num_layers=999), *remaining),
+            conditions=(replace(first_condition, model_num_layers=999), *remaining),
         )
         with self.assertRaisesRegex(DataValidationError, "model identity differs"):
             drifted.assert_matches_study(study)

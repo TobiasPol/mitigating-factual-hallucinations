@@ -19,7 +19,6 @@ from mfh.contracts import (
     ModelSpec,
     PromptSpec,
     Runtime,
-    TransformersModelClass,
 )
 from mfh.errors import ConfigurationError
 from mfh.provenance import stable_hash
@@ -80,16 +79,11 @@ def load_model_spec(path: str | Path) -> ModelSpec:
             "artifact_sha256",
             "artifact_size_bytes",
             "candidate_layers",
-            "transformers_model_class",
         },
         context=f"{path}:model",
     )
     try:
         data["runtime"] = Runtime(data["runtime"])
-        if "transformers_model_class" in data:
-            data["transformers_model_class"] = TransformersModelClass(
-                data["transformers_model_class"]
-            )
         if "candidate_layers" in data:
             if not isinstance(data["candidate_layers"], list):
                 raise ConfigurationError("candidate_layers must be a list")

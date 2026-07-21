@@ -84,25 +84,17 @@ def _resolve_site(block: nn.Module, site: ActivationSite) -> tuple[nn.Module, Ho
     if site is ActivationSite.BLOCK_OUTPUT:
         return block, HookMode.POST, ""
     if site is ActivationSite.POST_ATTENTION:
-        # Gemma 4 normalizes the attention delta before adding the residual, so
-        # pre_feedforward_layernorm is the first stable point containing the
-        # post-attention residual. Qwen exposes that residual as the input to
-        # post_attention_layernorm.
-        for name in ("pre_feedforward_layernorm", "post_attention_layernorm"):
-            module = getattr(block, name, None)
-            if isinstance(module, nn.Module):
-                return module, HookMode.PRE, name
+        module = getattr(block, "post_attention_layernorm", None)
+        if isinstance(module, nn.Module):
+            return module, HookMode.PRE, "post_attention_layernorm"
         raise ConfigurationError(
-            f"{type(block).__name__} has no supported post-attention residual site"
+            f"{type(block).__name__} has no Qwen post-attention residual site"
         )
     if site is ActivationSite.POST_MLP:
-        # Gemma's post_feedforward norm follows the combined dense/MoE output;
-        # Qwen's MLP/MoE module output is directly added to the residual.
-        for name in ("post_feedforward_layernorm", "mlp"):
-            module = getattr(block, name, None)
-            if isinstance(module, nn.Module):
-                return module, HookMode.POST, name
-        raise ConfigurationError(f"{type(block).__name__} has no supported FFN/MoE output site")
+        module = getattr(block, "mlp", None)
+        if isinstance(module, nn.Module):
+            return module, HookMode.POST, "mlp"
+        raise ConfigurationError(f"{type(block).__name__} has no Qwen FFN/MoE output site")
     raise ConfigurationError(f"unsupported activation site: {site}")
 
 

@@ -21,7 +21,7 @@
     "model_class": "mlx_lm.models.qwen3_5.Model",
     "tokenizer_class": "mlx_lm.tokenizer_utils.TokenizerWrapper",
     "model_config": "configs/models/qwen3.6-27b-mlx-4bit.yaml",
-    "model_config_sha256": "ea740d313de1cdce961fb8661e4aff8f2787b8e58783ee32cf727e448001c353",
+    "model_config_sha256": "6a0a47129637c50a4bf2df039dfacc8b65538336e665c41a63d52327096d51f3",
     "snapshot_manifest": "configs/models/qwen3.6-27b-mlx-4bit.snapshot.json",
     "snapshot_manifest_sha256": "d19fe3ddc525b000bd8d00b89d869e935c5b4652d95bcc596ca100c29f77b79f"
   },
@@ -132,14 +132,14 @@
     ],
     "source_bindings": {
       ".python-version": "ad0ad3b23d82790cd22132e05dcf874476f8182063748eb6a7ac14252f3dd6e8",
-      "pyproject.toml": "efe179915cb24b88a58fac177937f6962070f1e568f2f8aa18e4092509a684f0",
-      "src/mfh/cli.py": "6dfcb9b4d26e160cd5ac372b423d665763c4f244c6d668eb96a24e0df5fe6b0e",
+      "pyproject.toml": "8eff28c4b8662512e1ee4ea71786a97439372e7dc1f1add8aa4ddd25725f14e8",
+      "src/mfh/cli.py": "653093bcf5dec8a167e36fde06601da8537f8294ec665e72a6dfce562b7fe079",
       "src/mfh/experiments/e0_mlx.py": "6de4142245ddd6d4292ec7c6f67f07fb60a046d3f5e90ea519f7f9a10b97d693",
-      "src/mfh/inference/mlx_preflight.py": "b331ce3afd2a02b39957ee9fa8e92b38dbf093db134e8ba5e07e3f83034ca0db",
-      "src/mfh/inference/mlx_research.py": "7bd9dda1c79efb837eeb94b9fa4242c9d4fbed036e8f8b45f161ab00ec205399",
-      "src/mfh/inference/mlx_runtime.py": "e3e9677b6fba2ceb3f727cdf6ed0ae0b943b01897b5141270851dfa408326423",
-      "uv.lock": "c0f83f262a98fa49cc967fcbe416740821b1f3d28208a225d8fa7beac897d8d9"
+      "src/mfh/inference/mlx_preflight.py": "7f1555f3ab6d24b2fa65c95473e0715507838c7a09ea60bcb57646ffed1b8579",
+      "src/mfh/inference/mlx_research.py": "690940e75e699555d61b50edca2c1921cb63b61ad540acea77bdd90b4128d8f7",
+      "src/mfh/inference/mlx_runtime.py": "ef80007ac022dcee0c55943fa9aa219052c39c02e13fb03ebfb4f85198acfafc",
+      "uv.lock": "c3fd3f8afc8c96d536fb7c7c0a525b8888067a82b4b3bc38d36d0f373dbfb0aa"
     }
   },
-  "policy_digest": "f2bef0363effa924f96fb8609f06709a81c0faf0a5fc875fd47ee2e40a0b00a0"
+  "policy_digest": "1f60131092713ca39b2c3a8c156a77f8344526137308b715373df656db064185"
 }

@@ -28,7 +28,7 @@ def test_approved_qwen_model_selection_is_bound_to_exact_config_and_policy() -> 
     amendment = load_model_selection_amendment(AMENDMENT, model_config_directory=MODELS)
 
     assert amendment["amendment_digest"] == (
-        "d0a26583a42620a29a4c6bb1968f3995b8c5664d9cc0703692be66041c478dd8"
+        "fc26c55c864156a296d030dcd4624885f21d933075979a1891985cf6f252a7a7"
     )
     assert [row["name"] for row in amendment["active_models"]] == ["qwen3.6-27b-mlx-4bit"]
 
@@ -148,14 +148,13 @@ def test_public_scientific_writers_reject_outside_active_namespace(
         )
 
 
-def test_partial_superseded_artifact_transfer_is_rejected(tmp_path: Path) -> None:
+def test_qwen_model_selection_requires_no_legacy_artifacts(tmp_path: Path) -> None:
     project = tmp_path / "project"
     shutil.copytree(ROOT / "configs", project / "configs")
-    partial = project / "artifacts/runs/E0"
-    partial.mkdir(parents=True)
-    (partial / "unsealed-extra.bin").write_bytes(b"not frozen")
 
     amendment = project / "configs/experiments/model-selection-amendment.json"
     models = project / "configs/models"
-    with pytest.raises(ConfigurationError, match="superseded Bonsai E0 artifact differs"):
-        load_model_selection_amendment(amendment, model_config_directory=models)
+    loaded = load_model_selection_amendment(amendment, model_config_directory=models)
+
+    assert loaded["active_models"][0]["name"] == "qwen3.6-27b-mlx-4bit"
+    assert not (project / "artifacts").exists()

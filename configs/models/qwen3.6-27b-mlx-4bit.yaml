@@ -10,4 +10,3 @@ model:
   trust_remote_code: false
   role: sole-activation-research-model
   candidate_layers: [16, 31, 32, 47, 48, 57, 63]
-  transformers_model_class: causal_lm

@@ -56,10 +56,6 @@ def _validate_config(path: Path) -> int:
     elif "inference" in raw:
         parsed = load_inference_protocol(path)
         canonical = json.loads(canonical_json(parsed))
-    elif "llama_server" in raw:
-        from mfh.inference.llama_server import load_llama_server_identity
-
-        canonical = load_llama_server_identity(path).to_dict()
     elif "grader" in raw:
         grader = load_official_grader_spec(path)
         canonical = {
@@ -3236,24 +3232,6 @@ def _verify_language_suite(path: Path) -> int:
     return 0
 
 
-def _gguf_preflight(args: argparse.Namespace) -> int:
-    from mfh.inference.gguf import inspect_llama_cpp, verify_gguf_artifact
-
-    model = load_model_spec(args.model_config)
-    artifact = verify_gguf_artifact(model, args.model_artifact)
-    capabilities = inspect_llama_cpp(args.llama_cli)
-    _print(
-        {
-            "valid": True,
-            "model_artifact": str(artifact),
-            "model_sha256": model.artifact_sha256,
-            "capabilities": capabilities.to_dict(),
-            "capability_digest": capabilities.digest,
-        }
-    )
-    return 0
-
-
 def _transformers_snapshot_preflight(args: argparse.Namespace) -> int:
     from mfh.inference.transformers_snapshot import verify_transformers_snapshot
 
@@ -5308,15 +5286,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_language_parser.add_argument("path", type=Path)
     verify_language_parser.set_defaults(handler=lambda args: _verify_language_suite(args.path))
-
-    gguf_parser = subparsers.add_parser(
-        "gguf-preflight",
-        help="verify exact GGUF and llama.cpp identities and report deployment scope",
-    )
-    gguf_parser.add_argument("model_config", type=Path)
-    gguf_parser.add_argument("model_artifact", type=Path)
-    gguf_parser.add_argument("llama_cli", type=Path)
-    gguf_parser.set_defaults(handler=_gguf_preflight)
 
     transformers_snapshot_parser = subparsers.add_parser(
         "verify-transformers-snapshot",

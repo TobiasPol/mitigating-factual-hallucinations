@@ -17,7 +17,6 @@ from mfh.contracts import (
     Outcome,
     Runtime,
     TokenScope,
-    TransformersModelClass,
 )
 from mfh.errors import ConfigurationError
 
@@ -27,7 +26,6 @@ ROOT = Path(__file__).resolve().parents[1]
 class ConfigurationTests(unittest.TestCase):
     def test_repository_configs_are_strict_and_pinned(self) -> None:
         model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml")
-        gguf = load_model_spec(ROOT / "configs/models/ternary-bonsai-4b-gguf.yaml")
         benchmark = load_benchmark_spec(ROOT / "configs/benchmarks/simpleqa-verified.yaml")
         prompts = load_prompt_specs(ROOT / "configs/prompts/primary.yaml")
         protocol = load_inference_protocol(ROOT / "configs/experiments/core.yaml")
@@ -36,13 +34,7 @@ class ConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(model.num_layers, 64)
         self.assertIs(model.runtime, Runtime.MLX)
-        self.assertIs(
-            model.transformers_model_class,
-            TransformersModelClass.CAUSAL_LM,
-        )
         self.assertEqual(len(model.revision), 40)
-        self.assertEqual(gguf.artifact, "Ternary-Bonsai-4B-Q2_0.gguf")
-        self.assertEqual(len(gguf.artifact_sha256 or ""), 64)
         self.assertEqual(benchmark.split, "eval")
         self.assertEqual(
             {item.prompt_id for item in prompts},
@@ -66,7 +58,7 @@ class ConfigurationTests(unittest.TestCase):
   name: unsafe
   repository: example/model
   revision: main
-  runtime: transformers
+  runtime: mlx
   quantization: none
   num_layers: 1
 """,

@@ -1,6 +1,6 @@
 schema_version: 1
 analysis:
-  research_plan_sha256: 62ba818e2a1e6bf4f011f873c6d80df38e7738dba01a5bc51b981551c34d063f
+  research_plan_sha256: 0961dfbe20c5d1fcdf1c1d79392162191836aeb532eac3c8677642449788ffc4
   statistical_unit: question
   bootstrap_resamples: 10000
   confidence: 0.95

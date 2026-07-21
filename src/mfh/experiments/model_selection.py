@@ -21,13 +21,13 @@ from mfh.contracts import Runtime
 from mfh.errors import ConfigurationError
 from mfh.inference.mlx_preflight import load_mlx_runtime_policy
 from mfh.inference.transformers_snapshot import load_snapshot_manifest
-from mfh.provenance import sha256_file, sha256_path, stable_hash
+from mfh.provenance import sha256_file, stable_hash
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ACTIVE_NAME = "qwen3.6-27b-mlx-4bit"
 ACTIVE_MODEL_NAME = _ACTIVE_NAME
 APPROVED_AMENDMENT_DIGEST = (
-    "d0a26583a42620a29a4c6bb1968f3995b8c5664d9cc0703692be66041c478dd8"
+    "fc26c55c864156a296d030dcd4624885f21d933075979a1891985cf6f252a7a7"
 )
 ACTIVE_RUNTIME_POLICY_RELATIVE = "configs/runtimes/qwen3.6-27b-mlx-4bit-policy.json"
 ACTIVE_MODEL_IDENTITIES: Mapping[str, Mapping[str, Any]] = MappingProxyType(
@@ -49,7 +49,6 @@ _ACTIVE_MODEL_DETAILS: Mapping[str, Any] = MappingProxyType(
         "trust_remote_code": False,
         "role": "sole-activation-research-model",
         "candidate_layers": (16, 31, 32, 47, 48, 57, 63),
-        "transformers_model_class": "causal_lm",
         "artifact": None,
         "artifact_sha256": None,
         "artifact_size_bytes": None,
@@ -68,7 +67,6 @@ _ROOT_FIELDS = {
     "reason",
     "hardware_envelope",
     "study_namespace",
-    "superseded_models",
     "active_models",
     "preserved_model_independent_evidence",
     "required_effect",
@@ -114,77 +112,8 @@ _REQUIRED_EFFECT = {
     "e1_through_e10": (
         "run-only-the-sole-active-qwen-mlx-model-in-the-qwen-study-namespace"
     ),
-    "superseded_artifacts": "retain-immutable-and-exclude-from-qwen-scientific-gates",
     "runtime_preflight": "require-a-live-passed-m4-max-receipt-before-qwen-e0",
     "colab": "retired",
-}
-_SUPERSEDED_NAMES = (
-    "gemma4-e4b-it",
-    "ternary-bonsai-27b-awq",
-    "ternary-bonsai-27b-gguf",
-    "gemma4-e4b-it-qat-mobile",
-    "ternary-bonsai-4b-unpacked",
-    "ternary-bonsai-4b-gguf",
-    "bonsai-27b-mlx-1bit",
-)
-_BONSAI_PARTIAL_E1 = {
-    "artifacts/runs/E1/contract.json": (
-        "2c16da58c45434d7b68dab17d1ef01ebbdff6a5fb64276c5a654d3c237b254ca"
-    ),
-    "artifacts/runs/E1/creation-evidence.json": (
-        "6c62c65ce3b23628fa05afe4da655f1cf590ce17088e62c4bd6eff29c15123ca"
-    ),
-    "artifacts/work/E1/plan.json": (
-        "9284b3f5a8d9e5d8a69320b1a66ce97f62fb1fff2d84e7c66f1d252398352955"
-    ),
-    "artifacts/work/E1/generations.jsonl": (
-        "66ee22df1a8341b2dbf9e53b72a61963c0932cf35269248b2931768e76547183"
-    ),
-    "artifacts/work/E1/generation-sessions.jsonl": (
-        "f062b83701bc7dea4ea605f63c7b5eefef7d844d41362b3f7e70b49c07b02162"
-    ),
-    "artifacts/checkpoints/E1-generation.json": (
-        "c0041b226ee6afdcc6c8fd2d484d24bd1318694cb111e4bdc7b0502974ce12e9"
-    ),
-}
-_BONSAI_COMPLETED_E0 = {
-    "artifacts/runs/E0": (
-        "e8a52a3aafa2aa3bac96cb18cef06bb008c1e4a5fa974e34ea7fd5a5a31dbef1"
-    ),
-    "artifacts/e0/bonsai-27b-mlx": (
-        "5f851f9b54fd6a4b44fd680e69d30868751fdb38d0e0cd630080be3563425216"
-    ),
-    "artifacts/e0/bonsai-27b-mlx-work": (
-        "a0ae226c049c21d56214c2f5e6a54325cba8a78f27c59606127c89528d9aead1"
-    ),
-    "artifacts/e0/scientific-completion": (
-        "3106568517de65c2c502297f3c6f35e6ede21eb0cd4d54692e0d29fe7bb8fc55"
-    ),
-}
-_BONSAI_E0_INVENTORY = {
-    "artifacts/runs/E0": (14, 9),
-    "artifacts/e0/bonsai-27b-mlx": (8, 1),
-    "artifacts/e0/bonsai-27b-mlx-work": (3, 1),
-    "artifacts/e0/scientific-completion": (2, 1),
-}
-_BONSAI_PARTIAL_E1_INVENTORY = {
-    "artifacts/runs/E1": frozenset(
-        {
-            "contract.json",
-            "creation-evidence.json",
-            "gate-artifacts",
-            "gates",
-            "shards",
-        }
-    ),
-    "artifacts/work/E1": frozenset(
-        {
-            "generation-sessions.jsonl",
-            "generations.jsonl",
-            "plan.json",
-        }
-    ),
-    "artifacts/checkpoints": frozenset({"E1-generation.json"}),
 }
 
 
@@ -241,7 +170,6 @@ def validate_active_model_spec(model: Any) -> None:
         "trust_remote_code": model.trust_remote_code,
         "role": model.role,
         "candidate_layers": model.candidate_layers,
-        "transformers_model_class": model.transformers_model_class.value,
         "artifact": model.artifact,
         "artifact_sha256": model.artifact_sha256,
         "artifact_size_bytes": model.artifact_size_bytes,
@@ -292,85 +220,6 @@ def _validate_active_model(
         raise ConfigurationError("active model runtime policy differs")
 
 
-def _validate_superseded_artifacts(
-    raw: Mapping[str, Any], *, project_root: Path
-) -> None:
-    superseded = raw.get("superseded_models")
-    if (
-        not isinstance(superseded, list)
-        or tuple(
-            item.get("name") for item in superseded if isinstance(item, Mapping)
-        )
-        != _SUPERSEDED_NAMES
-    ):
-        raise ConfigurationError("superseded model policy differs")
-    bonsai = _mapping(superseded[-1], "superseded Bonsai model")
-    if (
-        bonsai.get("scientific_status")
-        != "superseded-pilot-complete-e0-partial-e1-retained-immutable"
-        or bonsai.get("retained_e0_manifest_digest")
-        != "335967628f31238d2eec4475cd0bc1bacaee7b330cedf9391105fd18b48a5f09"
-        or bonsai.get("retained_e0_completion_digest")
-        != "4579c06e0111abcc004bafbbb06ef1793b8e95e05cf9b49f5cdb17781d037a28"
-        or bonsai.get("retained_e0_artifact_sha256") != _BONSAI_COMPLETED_E0
-        or bonsai.get("partial_e1_records") != 17_244
-        or bonsai.get("retained_artifact_sha256") != _BONSAI_PARTIAL_E1
-    ):
-        raise ConfigurationError("superseded Bonsai pilot declaration differs")
-    for relative, expected in _BONSAI_COMPLETED_E0.items():
-        path = project_root / relative
-        descendants = tuple(path.rglob("*")) if path.is_dir() else ()
-        files = tuple(item for item in descendants if item.is_file())
-        directories = tuple(item for item in descendants if item.is_dir())
-        expected_files, expected_directories = _BONSAI_E0_INVENTORY[relative]
-        if (
-            path.is_symlink()
-            or not path.is_dir()
-            or any(
-                item.is_symlink() or not (item.is_file() or item.is_dir())
-                for item in descendants
-            )
-            or len(files) != expected_files
-            or len(directories) + 1 != expected_directories
-            or sha256_path(path) != expected
-        ):
-            raise ConfigurationError(
-                f"superseded Bonsai E0 artifact differs: {relative}"
-            )
-    for relative, expected_entries in _BONSAI_PARTIAL_E1_INVENTORY.items():
-        root = project_root / relative
-        descendants = tuple(root.rglob("*")) if root.is_dir() else ()
-        observed_entries = frozenset(
-            item.relative_to(root).as_posix() for item in descendants
-        )
-        if (
-            root.is_symlink()
-            or not root.is_dir()
-            or observed_entries != expected_entries
-            or any(
-                item.is_symlink() or not (item.is_file() or item.is_dir())
-                for item in descendants
-            )
-        ):
-            raise ConfigurationError(
-                f"superseded Bonsai E1 inventory differs: {relative}"
-            )
-    for relative, expected in _BONSAI_PARTIAL_E1.items():
-        path = project_root / relative
-        if path.is_symlink() or not path.is_file() or sha256_file(path) != expected:
-            raise ConfigurationError(
-                f"superseded Bonsai pilot artifact differs: {relative}"
-            )
-    generations = project_root / "artifacts/work/E1/generations.jsonl"
-    try:
-        with generations.open(encoding="utf-8") as handle:
-            retained_rows = sum(1 for _line in handle)
-    except OSError as exc:  # pragma: no cover - regular-file check precedes this
-        raise ConfigurationError("cannot count superseded Bonsai E1 rows") from exc
-    if retained_rows != 17_244:
-        raise ConfigurationError("superseded Bonsai E1 row count differs")
-
-
 def load_model_selection_amendment(
     path: str | Path,
     *,
@@ -380,8 +229,8 @@ def load_model_selection_amendment(
 
     source = Path(path).absolute()
     raw = _load_json(source, context="model-selection amendment")
-    if set(raw) != _ROOT_FIELDS or raw.get("schema_version") != 2:
-        raise ConfigurationError("model-selection amendment fields differ from schema version 2")
+    if set(raw) != _ROOT_FIELDS or raw.get("schema_version") != 3:
+        raise ConfigurationError("model-selection amendment fields differ from schema version 3")
     declared = _sha256(raw.get("amendment_digest"), "amendment_digest")
     body = dict(raw)
     body.pop("amendment_digest")
@@ -420,7 +269,6 @@ def load_model_selection_amendment(
         raise ConfigurationError("preserved evidence differs from the approved amendment")
     for key, value in preserved.items():
         _sha256(value, f"preserved evidence {key}")
-    _validate_superseded_artifacts(raw, project_root=project_root)
     if dict(_mapping(raw.get("required_effect"), "required effect")) != _REQUIRED_EFFECT:
         raise ConfigurationError("required amendment effect differs from approved policy")
     return {**raw, "amendment_digest": declared}

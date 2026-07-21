@@ -73,11 +73,11 @@ def _fixture() -> tuple[
 
 def _model() -> ModelSpec:
     return ModelSpec(
-        name="bonsai-test",
-        repository="prism-ml/Bonsai-27B-mlx-1bit",
-        revision="e" * 40,
+        name="qwen3.6-27b-mlx-4bit",
+        repository="mlx-community/Qwen3.6-27B-4bit",
+        revision="c000ac2c2057d94be3fa931000c31723aac53282",
         runtime=Runtime.MLX,
-        quantization="binary-g128-mlx-1bit",
+        quantization="affine-g64-mlx-4bit",
         num_layers=64,
     )
 
