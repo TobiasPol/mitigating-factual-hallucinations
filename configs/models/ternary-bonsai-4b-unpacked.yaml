@@ -1,0 +1,13 @@
+schema_version: 1
+model:
+  name: ternary-bonsai-4b-unpacked
+  repository: prism-ml/Ternary-Bonsai-4B-unpacked
+  revision: 4485fae7a00129467b9329b738110d88b2942a1a
+  runtime: transformers
+  quantization: ternary-unpacked-fp16
+  num_layers: 36
+  dtype: float16
+  trust_remote_code: false
+  role: activation-research
+  candidate_layers: [9, 18, 27, 32, 35]
+  transformers_model_class: causal_lm

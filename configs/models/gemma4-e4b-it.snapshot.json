@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "repository": "google/gemma-4-E4B-it",
+  "revision": "a4c2d58be94dda072b918d9db64ee85c8ed34e3f",
+  "file_count": 9,
+  "total_size_bytes": 16024820722,
+  "files": [
+    {"path": ".gitattributes", "size_bytes": 1570, "digest_algorithm": "git-blob-sha1", "digest": "52373fe24473b1aa44333d318f578ae6bf04b49b"},
+    {"path": "README.md", "size_bytes": 27169, "digest_algorithm": "git-blob-sha1", "digest": "821cba3209cb6072005a8704323626c77858efce"},
+    {"path": "chat_template.jinja", "size_bytes": 17336, "digest_algorithm": "git-blob-sha1", "digest": "c19999a347da729cf62806a8ddb7eb8e315223b5"},
+    {"path": "config.json", "size_bytes": 5145, "digest_algorithm": "git-blob-sha1", "digest": "d68960fdcce766f2bfe41436325a8a483a74d125"},
+    {"path": "generation_config.json", "size_bytes": 208, "digest_algorithm": "git-blob-sha1", "digest": "e605bb4523b1462ea9d9a3810b9e3ecf7ab7b1f6"},
+    {"path": "model.safetensors", "size_bytes": 15992595884, "digest_algorithm": "sha256", "digest": "cfbd3d2f1cd71bd471c37fe2bf8546d5028d41e5736f64e1ca6c6b8893125503"},
+    {"path": "processor_config.json", "size_bytes": 1689, "digest_algorithm": "git-blob-sha1", "digest": "5465974d23e1eca2c46c2809b26c997946ce0d90"},
+    {"path": "tokenizer.json", "size_bytes": 32169626, "digest_algorithm": "sha256", "digest": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f"},
+    {"path": "tokenizer_config.json", "size_bytes": 2095, "digest_algorithm": "git-blob-sha1", "digest": "375b25dc8be85705251e41be1c25310d24932051"}
+  ]
+}

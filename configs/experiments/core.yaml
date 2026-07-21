@@ -1,0 +1,25 @@
+schema_version: 1
+inference:
+  temperature: 0.0
+  do_sample: false
+  max_new_tokens: 48
+  stop_condition: eos_or_first_completed_short_answer
+  expose_chain_of_thought: false
+  thinking_enabled: false
+  retrieval_enabled: false
+  tools_enabled: false
+  seeds: [17, 29, 41]
+
+split_plan:
+  T-steer: 30000
+  T-controller: 5000
+  T-dev: 5000
+  T-test: 5000
+
+relative_layers: [0.25, 0.5, 0.75, 0.9, 1.0]
+standardized_alpha: [0.0, 0.1, 0.25, 0.5, 1.0, 2.0]
+coordinate_sparsity: [0.01, 0.05, 0.10, 0.25]
+vector_bank_sizes: [1, 4, 8, 16]
+primary_prompts: [P0-neutral, P1-direct, P2-calibrated-abstention]
+diagnostic_prompt: P3-forced-answer
+methods: [M0, M1-R, M1-P, M2, M3, M4a, M4b, M5, M6]

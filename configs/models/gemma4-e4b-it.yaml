@@ -1,0 +1,13 @@
+schema_version: 1
+model:
+  name: gemma4-e4b-it
+  repository: google/gemma-4-E4B-it
+  revision: a4c2d58be94dda072b918d9db64ee85c8ed34e3f
+  runtime: transformers
+  quantization: none
+  num_layers: 42
+  dtype: bfloat16
+  trust_remote_code: false
+  role: research-and-replication
+  candidate_layers: [10, 21, 31, 37, 41]
+  transformers_model_class: image_text_to_text

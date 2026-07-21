@@ -1,0 +1,20 @@
+schema_version: 1
+grader:
+  benchmark: aa_omniscience_public_600
+  source_repository: ArtificialAnalysis/AA-Omniscience-Public
+  source_revision: 4a8ffc87c4650054825fb767fe0da4a4fc97ff32
+  source_artifact: README.md
+  source_artifact_sha256: f3fd2fc7e507898fb7c718c9685c180fe4aa0afcc1d14230f95828baf5f999d4
+  grader_model: google/gemini-2.5-flash
+  grader_model_revision: gemini-2.5-flash
+  temperature: 0.0
+  reasoning_enabled: true
+  prompt_path: aa-omniscience-public.prompt.txt
+  prompt_sha256: 7d2f6d60367d8f3ca7c92b115c65fa536e321e27ce93e0779d77d5c3700901c9
+  label_mapping:
+    A: C
+    B: I
+    C: P
+    D: A
+  maximum_attempts: 3
+  failure_outcome: U

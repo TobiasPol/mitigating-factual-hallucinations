@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "repository": "prism-ml/Ternary-Bonsai-4B-unpacked",
+  "revision": "4485fae7a00129467b9329b738110d88b2942a1a",
+  "file_count": 16,
+  "total_size_bytes": 8059545928,
+  "files": [
+    {"path": ".gitattributes", "size_bytes": 1570, "digest_algorithm": "git-blob-sha1", "digest": "52373fe24473b1aa44333d318f578ae6bf04b49b"},
+    {"path": "LICENSE", "size_bytes": 10174, "digest_algorithm": "git-blob-sha1", "digest": "66a27ec5ff940d3a9652d2948746ebac4c9d0188"},
+    {"path": "NOTICE.txt", "size_bytes": 412, "digest_algorithm": "git-blob-sha1", "digest": "2c102a72f8f45d912370f5b194fdd914ef27ab9d"},
+    {"path": "README.md", "size_bytes": 956, "digest_algorithm": "git-blob-sha1", "digest": "638584d248912c3275d3e66e42bb644d4541dfac"},
+    {"path": "added_tokens.json", "size_bytes": 707, "digest_algorithm": "git-blob-sha1", "digest": "b54f9135e44c1e81047e8d05cb027af8bc039eed"},
+    {"path": "chat_template.jinja", "size_bytes": 4063, "digest_algorithm": "git-blob-sha1", "digest": "0b04cc1ea9799b1be5432e625ee200a6d4710cde"},
+    {"path": "config.json", "size_bytes": 3054, "digest_algorithm": "git-blob-sha1", "digest": "26687311320af187f4118b2d2b5dbc77767cdf4a"},
+    {"path": "generation_config.json", "size_bytes": 313, "digest_algorithm": "git-blob-sha1", "digest": "24f8339b8eaacf09988eef9fccb38e1f48e4778b"},
+    {"path": "merges.txt", "size_bytes": 1671853, "digest_algorithm": "git-blob-sha1", "digest": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"},
+    {"path": "model-00001-of-00002.safetensors", "size_bytes": 4975543224, "digest_algorithm": "sha256", "digest": "3cb636f3cbdd8f253cfe36040028c32397a8ddeb741dfd5c13acac3e1efb5d2d"},
+    {"path": "model-00002-of-00002.safetensors", "size_bytes": 3068071280, "digest_algorithm": "sha256", "digest": "9aae84d36ff88887761107fb55e39cb5494359a744001e65fe48135dea159312"},
+    {"path": "model.safetensors.index.json", "size_bytes": 32818, "digest_algorithm": "git-blob-sha1", "digest": "b51a93f97b506a2eb1a15248b0b6980dac2ca2bb"},
+    {"path": "special_tokens_map.json", "size_bytes": 613, "digest_algorithm": "git-blob-sha1", "digest": "ac23c0aaa2434523c494330aeb79c58395378103"},
+    {"path": "tokenizer.json", "size_bytes": 11422654, "digest_algorithm": "sha256", "digest": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"},
+    {"path": "tokenizer_config.json", "size_bytes": 5404, "digest_algorithm": "git-blob-sha1", "digest": "ddaf69808214a44fdd26d3785b66c1367c78277a"},
+    {"path": "vocab.json", "size_bytes": 2776833, "digest_algorithm": "git-blob-sha1", "digest": "4783fe10ac3adce15ac8f358ef5462739852c569"}
+  ]
+}

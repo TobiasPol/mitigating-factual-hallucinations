@@ -1,0 +1,535 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+\makeatletter
+\def\input@path{{docs/rub-beamer/}{rub-beamer/}}
+\makeatother
+\usetheme[empty]{Rub}
+
+\colorlet{Ink}{saphierblau}
+\definecolor{Muted}{HTML}{66717C}
+\colorlet{Blue}{saphierblau}
+\colorlet{BlueLight}{saphierblau!10}
+\colorlet{Green}{gelbgruen!55!black}
+\colorlet{GreenLight}{gelbgruen!15}
+\definecolor{Amber}{HTML}{A46300}
+\definecolor{AmberLight}{HTML}{FFF0D2}
+\colorlet{Red}{alertred}
+\colorlet{RedLight}{alertred!12}
+\colorlet{GreyLight}{lichtgrau}
+
+\setbeamercolor{progress done}{bg=saphierblau,fg=white}
+\setbeamercolor{progress remaining}{bg=lichtgrau,fg=saphierblau}
+\setbeamerfont{title}{series=\bfseries,size=\fontsize{24}{28}}
+\setbeamerfont{subtitle}{series=\normalfont,size=\fontsize{13}{16}}
+\setbeamerfont{frametitle}{series=\bfseries,size=\fontsize{16}{18}}
+\setbeamerfont{normal text}{size=\fontsize{10.5}{13}}
+\AtBeginEnvironment{column}{\RaggedRight}
+
+\newcommand{\metric}[3]{%
+  \begin{beamercolorbox}[rounded=true,sep=0.42em,wd=0.90\linewidth]{#3}
+    {\fontsize{17}{19}\selectfont\bfseries #1}\par
+    \vspace{0.04cm}{\footnotesize #2}
+  \end{beamercolorbox}}
+
+\newcommand{\done}{\colorbox{GreenLight}{\textcolor{Green}{\strut\bfseries complete}}}
+\newcommand{\running}{\colorbox{BlueLight}{\textcolor{Blue}{\strut\bfseries running}}}
+\newcommand{\validated}{\colorbox{GreenLight}{\textcolor{Green}{\strut\bfseries implemented}}}
+\newcommand{\repair}{\colorbox{RedLight}{\textcolor{Red}{\strut\bfseries no-go}}}
+\newcommand{\partialstatus}{\colorbox{AmberLight}{\textcolor{Amber}{\strut\bfseries partial}}}
+\newcommand{\scaffold}{\colorbox{GreyLight}{\textcolor{Muted}{\strut\bfseries scaffold}}}
+
+\title{Mitigating factual hallucinations}
+\subtitle{What we are researching, why the study is designed this way, and where implementation stands}
+\author{Master's research project}
+\date{17 July 2026}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \vspace{0.55cm}
+  {\color{Blue}\rule{1.5cm}{3pt}}\\[0.45cm]
+  {\usebeamerfont{title}\inserttitle\par}
+  \vspace{0.25cm}
+  {\usebeamerfont{subtitle}\insertsubtitle\par}
+  \vfill
+  \begin{beamercolorbox}[rounded=true,sep=0.7em,wd=0.91\textwidth]{progress remaining}
+    \textbf{Current position:} the E0--E10 software, provenance, replay, and analysis path is implemented. The earlier Bonsai pilot is preserved but superseded; live Qwen validation and every Qwen scientific phase remain to be executed.
+  \end{beamercolorbox}
+  \vspace{0.4cm}
+  {\small\color{Muted}Evidence snapshot: 17 July 2026}
+\end{frame}
+
+\begin{frame}{Reliability means avoiding two opposite failures}
+  \footnotesize
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.46\textwidth}
+      \textcolor{Red}{\bfseries Confident fabrication}\par\vspace{0.15cm}
+      The model gives a fluent factual answer that is wrong. The user may trust it precisely because it sounds authoritative.\par\vspace{0.25cm}
+      \textbf{What we call a hallucination}\par
+      An \emph{incorrect attempted answer}: the response makes a factual commitment that does not match the accepted answer.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \textcolor{Amber}{\bfseries Unnecessary refusal}\par\vspace{0.15cm}
+      The model says ``I do not know'' even though it could answer correctly. Hallucinations fall, but usefulness falls with them.\par\vspace{0.25cm}
+      \textbf{Why error rate alone misleads}\par
+      A model that refuses every question has zero attempted hallucinations and zero practical utility.
+    \end{column}
+  \end{columns}
+  \vspace{0.2cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.3em]{progress done}
+    \textbf{Research goal:} answer when the model is likely correct, intervene when knowledge may be recoverable, and abstain only when residual risk remains too high.
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{We frame the task as selective prediction}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.48\textwidth}
+      \textbf{Optimization target}\par\vspace{0.18cm}
+      Maximize answer coverage subject to a strict bound on incorrect attempted answers, while preserving utility and safety.\par\vspace{0.45cm}
+      \begin{beamercolorbox}[rounded=true,sep=0.45em]{progress remaining}
+        \centering
+        $\max\ \mathrm{Coverage}$\quad subject to\quad
+        $\mathrm{HallucinationRisk}\leq\epsilon$
+      \end{beamercolorbox}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \textbf{Why this formulation}\par\vspace{0.18cm}
+      \begin{itemize}\setlength\itemsep{0.12cm}
+        \item It makes refusal cost visible.
+        \item It supports fair comparisons at matched coverage.
+        \item It separates ``fewer errors'' from ``more knowledge.''
+        \item It allows a statistical upper bound when zero errors are observed.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{0.3cm}
+  {\footnotesize\color{Muted}Example: zero errors in 1,000 attempted answers implies an approximate one-sided 95\% upper risk bound of $3/1000=0.3\%$, not universal zero risk.}
+\end{frame}
+
+\begin{frame}{Four questions determine whether steering is genuinely useful}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.48\textwidth}
+      \textcolor{Blue}{\bfseries RQ1 --- Adaptive vs. static}\par
+      Can the query choose its vector, layer, and strength better than one fixed direction?\par\vspace{0.35cm}
+      \textcolor{Blue}{\bfseries RQ2 --- Knowledge vs. abstention}\par
+      Do incorrect answers become correct, or merely become refusals?
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textcolor{Blue}{\bfseries RQ3 --- Sparse and protected edits}\par
+      Can factuality features be changed without harming language, safety, or general capability?\par\vspace{0.35cm}
+      \textcolor{Blue}{\bfseries RQ4 --- Prompt interaction}\par
+      Does internal steering add value beyond inexpensive textual instructions?
+    \end{column}
+  \end{columns}
+  \vspace{0.35cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.45em]{progress remaining}
+    \textbf{Why all four are needed:} a lower raw hallucination count can otherwise be explained by stronger perturbations, more refusals, benchmark-specific tuning, or a prompt that already produces the same effect.
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{Steering changes behavior inside inference}
+  \footnotesize
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.45\textwidth}
+      \textbf{What it is}\par\vspace{0.15cm}
+      We read an internal activation, add a learned direction at a chosen transformer site, and continue generation without retraining all model weights.\par\vspace{0.25cm}
+      \textbf{Methods being compared}\par
+      M0 no steering; M1 dense centroid; M2 published baselines; M3 adaptive controller; M4 sparse features; M5 protected subspace; M6 composite policy.
+    \end{column}
+    \begin{column}{0.49\textwidth}
+      \textbf{Why go beyond one global vector}\par\vspace{0.15cm}
+      A dense direction can mix factuality with uncertainty, refusal style, language, and safety. Applying it to every query may therefore fix some errors while creating new regressions.\par\vspace{0.25cm}
+      \textbf{Planned improvement}\par
+      Estimate risk from the current query, intervene only in the recoverable region, and constrain the edit to features that preserve protected behavior.
+    \end{column}
+  \end{columns}
+  \vspace{0.18cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.3em]{progress done}
+    \textbf{Core causal test:} compare every intervention with the same checkpoint, questions, prompts, decoding, and grader; change only the internal policy.
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{Outcome transitions reveal what an improvement means}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.31\textwidth}
+      \textbf{Response labels}\par\vspace{0.15cm}
+      C --- correct\par
+      P --- partially correct\par
+      I --- incorrect attempted\par
+      A --- abstention\par
+      U --- unscorable
+    \end{column}
+    \begin{column}{0.31\textwidth}
+      \textbf{Desired transitions}\par\vspace{0.15cm}
+      $I\rightarrow C$: knowledge recovery\par
+      $I\rightarrow A$: safer abstention\par
+      $C\rightarrow C$: correct preservation
+    \end{column}
+    \begin{column}{0.31\textwidth}
+      \textbf{Failure transitions}\par\vspace{0.15cm}
+      $C\rightarrow A$: strict over-refusal\par
+      $C\rightarrow I$: factual regression\par
+      correct $\rightarrow$ wrong language or unsafe behavior
+    \end{column}
+  \end{columns}
+  \vspace{0.35cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.45em]{progress remaining}
+    \textbf{Why forced-answer and likelihood tests matter:} if gains disappear when abstention is discouraged and gold-answer likelihood does not rise, steering probably changed refusal behavior rather than knowledge expression.
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{Three benchmarks serve different scientific roles}
+  \footnotesize
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabular}{@{}>{\bfseries\raggedright\arraybackslash}p{0.22\textwidth} >{\raggedright\arraybackslash}p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.43\textwidth}@{}}
+    \toprule
+    Benchmark & Role & Why it is included \\
+    \midrule
+    TriviaQA & 5,000-question controller split & Large development source for probes, vectors, routers, and in-distribution testing; evidence documents are discarded to keep the task closed-book. \\
+    SimpleQA Verified & 1,000 untouched questions & External short-answer test with an explicit correct/incorrect/not-attempted rubric; useful for detecting refusal-driven gains. \\
+    AA-Omniscience Public-600 & 600 untouched questions & Directly tests calibrated knowledge boundaries and includes an official abstention-aware setup. Public size limits domain-level claims. \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.16cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.25em]{progress done}
+    \textbf{Why this split matters:} methods are learned on TriviaQA and transferred unchanged to the two evaluation sets, reducing target-benchmark overfitting.
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{Resource limits changed the execution platform}
+  \footnotesize
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textbf{What happened}\par\vspace{0.15cm}
+      \begin{enumerate}\setlength\itemsep{0.06cm}
+        \item Colab Free offered a T4 or v5e TPU, but its RAM/session limits could not support the complete activation workflow reliably.
+        \item The Colab notebook and import bundle were retired before scientific E1 results.
+        \item The study moved to one native Apple-silicon checkpoint on the available MacBook Pro.
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textbf{Why this was the defensible choice}\par\vspace{0.15cm}
+      \begin{itemize}\setlength\itemsep{0.06cm}
+        \item Stable access to internal hooks is more important than nominal accelerator speed.
+        \item Local runs can resume without session eviction.
+        \item One pinned representation prevents mixing incompatible activations across runtimes.
+        \item The causal questions remain testable within one model.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{0.15cm}
+  {\scriptsize\color{Red}\textbf{Limitation:} conclusions apply only to this checkpoint/runtime; cross-model replication remains future work.}
+\end{frame}
+
+\begin{frame}{Uniform four-bit Qwen is the frozen scientific target}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.48\textwidth}
+      \textbf{Pinned system}\par\vspace{0.15cm}
+      \texttt{mlx-community/Qwen3.6-27B-4bit}\par
+      exact revision \texttt{c000ac2c...3282}\par
+      official MLX 0.31.2 / MLX-LM 0.31.3\par
+      Apple M4 Max, 48 GiB unified memory\par\vspace{0.35cm}
+      64 blocks, hidden size 5,120; pinned 16.08 GB snapshot; uniform affine group-64 four-bit representation of \texttt{Qwen/Qwen3.6-27B}.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \textbf{Why this model}\par\vspace{0.15cm}
+      \begin{itemize}\setlength\itemsep{0.13cm}
+        \item It fits the approved 48 GiB machine with headroom for inference state.
+        \item Native MLX uses the released Apple-silicon representation.
+        \item One uniform quantization rule avoids layer-dependent precision as a hidden experimental factor.
+        \item Live preflight must prove all intervention sites on both linear- and full-attention blocks before E0.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Human review closes a gap automation cannot settle}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textbf{What we did}\par\vspace{0.15cm}
+      Exact, fuzzy, and semantic matching created a blinded queue of the 200 highest-risk contamination candidates. A human reviewed the supplied CSV without model-condition information.\par\vspace{0.35cm}
+      \textbf{Result}\par
+      200 rows reviewed; 197 distinct candidate pairs; 3 genuine overlaps were excluded; none affected the 500-question E0 cohort.
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textbf{Why a person was needed}\par\vspace{0.15cm}
+      Similar wording, shared entities, and paraphrases can look like duplicates to an embedding model without asking the same factual question. Conversely, true leakage can be phrased differently.\par\vspace{0.35cm}
+      \textbf{Why it gates E1}\par
+      Vectors and controllers must not learn from evaluation questions. The signed review receipt proves the development/evaluation boundary before expensive computation starts.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{External graders are used where exact matching is insufficient}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textbf{What we implemented}\par\vspace{0.15cm}
+      Local deterministic generation is followed by frozen OpenRouter grading for semantic benchmarks: GPT-4.1 with the released SimpleQA rubric and stable Gemini 2.5 Flash with the AA rubric.\par\vspace{0.35cm}
+      The adapter records the prompt, model identity, transport, retries, parser result, and terminal failures.
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textbf{Why this is necessary}\par\vspace{0.15cm}
+      Correct answers often use aliases or explanatory wording that string matching cannot judge. AA also needs a partial-credit distinction.\par\vspace{0.35cm}
+      \textbf{Why it is frozen and fail-closed}\par
+      A changing grader can change the experiment. Atomic labels, bounded retries, and ``unscorable'' on failure prevent silent defaults from biasing results.
+    \end{column}
+  \end{columns}
+  \vspace{0.3cm}
+  {\footnotesize\color{Muted}The retired Gemini preview endpoint was replaced before E1 grading; the amendment preserves the rubric but explicitly limits checkpoint comparability.}
+\end{frame}
+
+\begin{frame}{Content-addressed gates keep runs auditable}
+  \footnotesize
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.46\textwidth}
+      \textbf{What was built}\par\vspace{0.15cm}
+      Every phase has frozen inputs, manifests, SHA-256 identities, append-only records, resumable chain heads, prerequisite receipts, and replayable finalizers.\par\vspace{0.25cm}
+      Model, tokenizer, prompt template, decoding, hardware, runtime, split, grader, and code identities are bound to each run.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Why this is unusually strict}\par\vspace{0.15cm}
+      \begin{itemize}\setlength\itemsep{0.06cm}
+        \item Multi-day local runs must resume without duplicating or silently changing rows.
+        \item Later phases must not consume unverified upstream outputs.
+        \item Hyperparameters must be selected before untouched tests are opened.
+        \item A result should be independently replayable from immutable evidence.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{0.15cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.28em]{progress done}
+    \textbf{Interpretation rule:} passing tests shows that software enforces the protocol; only a completed scientific ledger supports an experimental claim.
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{E0 tests whether local experimentation is viable}
+  \footnotesize
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textbf{What E0 tested}\par\vspace{0.15cm}
+      \begin{itemize}\setlength\itemsep{0.04cm}
+        \item exact model and snapshot identity
+        \item tokenizer and chat-template identity
+        \item deterministic decoding across repeated questions
+        \item throughput, latency, and peak unified memory
+        \item all required activation capture/intervention sites
+        \item scientific admission after contamination review
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textbf{Why E0 came first}\par\vspace{0.15cm}
+      The rest of the plan depends on stable activations. If the checkpoint, template, cached path, or hook changes, learned vectors no longer refer to the same internal system.\par\vspace{0.2cm}
+      Measuring memory before activation collection also prevents designing E2--E8 around an impossible storage or compute budget.
+    \end{column}
+  \end{columns}
+  \vspace{0.14cm}
+  {\scriptsize\color{Muted}\textbf{Design choice:} 500 model-independent reserved questions, each generated twice with the exact E1 decoding path.}
+\end{frame}
+
+\begin{frame}{The Bonsai E0 pilot is preserved but superseded}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.72\textwidth}
+      \begin{columns}[T,onlytextwidth]
+        \begin{column}{0.5\textwidth}\metric{500}{questions, each repeated twice}{progress remaining}\end{column}
+        \begin{column}{0.5\textwidth}\metric{0}{determinism mismatches}{progress remaining}\end{column}
+      \end{columns}
+      \vspace{0.2cm}
+      \begin{columns}[T,onlytextwidth]
+        \begin{column}{0.5\textwidth}\metric{13.84}{mean generated tokens/s}{progress remaining}\end{column}
+        \begin{column}{0.5\textwidth}\metric{4.86 GB}{measured peak memory}{progress remaining}\end{column}
+      \end{columns}
+    \end{column}
+    \begin{column}{0.25\textwidth}
+      \begin{beamercolorbox}[rounded=true,sep=0.4em]{progress remaining}
+        \small\textbf{Pilot passed}\par\vspace{0.12cm}
+        \footnotesize
+        \textcolor{Green}{\checkmark}\ checkpoint\par
+        \textcolor{Green}{\checkmark}\ chat template\par
+        \textcolor{Green}{\checkmark}\ deterministic decode\par
+        \textcolor{Green}{\checkmark}\ MLX runtime
+      \end{beamercolorbox}
+    \end{column}
+  \end{columns}
+  \vspace{0.08cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.32em,wd=0.95\textwidth]{progress done}
+    \small\textbf{Meaning:} the old Bonsai/M1 path demonstrated feasibility, but none of these measurements can satisfy a Qwen prerequisite or gate.
+  \end{beamercolorbox}
+  \vspace{0.1cm}
+  {\scriptsize\color{Red}\textbf{Required next evidence:} a new write-once Qwen/M4 Max preflight receipt and a complete Qwen E0 inside the separate study namespace.}
+\end{frame}
+
+\begin{frame}{E1 establishes the prompt-only baseline}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textbf{Frozen experiment}\par\vspace{0.15cm}
+      One model $\times$ three benchmarks $\times$ three prompts:\par
+      P0 neutral; P1 direct answer; P2 calibrated abstention.\par\vspace{0.35cm}
+      19,800 deterministic local generations, maximum 48 new tokens, seed 17; 4,800 semantic grades scheduled after generation.
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textbf{Why prompt-only comes first}\par\vspace{0.15cm}
+      A calibrated instruction may reproduce part of steering's benefit at almost no engineering cost. Without E1, later gains cannot be attributed to internal intervention.\par\vspace{0.35cm}
+      E1 also supplies the C/P/I/A labels used to learn probes, construct correct-versus-incorrect activation pairs, and power later paired analyses.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{The partial Bonsai E1 cannot be resumed as Qwen evidence}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.62\textwidth}
+      \textbf{17,244 of 19,800 pilot generations are retained byte-for-byte}\par\vspace{0.32cm}
+      \hbox{%
+        \begin{beamercolorbox}[wd=.871\linewidth,ht=2.2ex,dp=0.8ex,center]{progress done}\small 87.1\% superseded pilot\end{beamercolorbox}%
+        \begin{beamercolorbox}[wd=.129\linewidth,ht=2.2ex,dp=0.8ex,center]{progress remaining}\small excluded\end{beamercolorbox}}
+      \vspace{0.48cm}
+      \begin{itemize}\setlength\itemsep{0.12cm}
+        \item append-only rows with a resumable chain head
+        \item condition-major order across all prompt/benchmark cells
+        \item exact checkpoint, split, prompt, runtime, and protocol hashes
+        \item exact hashes are recorded in the model-selection amendment
+        \item Qwen E1 starts from zero after a new Qwen E0 admission
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.34\textwidth}
+      \begin{beamercolorbox}[rounded=true,sep=0.52em]{progress remaining}
+        \textbf{Evidence boundary}\par\vspace{0.25cm}
+        \footnotesize\textcolor{Green}{\bfseries Can claim:} the abandoned pilot has an immutable, identity-bound record.\par\vspace{0.3cm}
+        \textcolor{Red}{\bfseries Cannot claim:} any pilot output is evidence about Qwen or completes E1.
+      \end{beamercolorbox}
+    \end{column}
+  \end{columns}
+  \vspace{0.12cm}
+  {\tiny\color{Muted}Active namespace: \texttt{artifacts/studies/qwen36-27b-mlx4-m4max48-v1}.}
+\end{frame}
+
+\begin{frame}{E2 locates internal factual-outcome separation}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textbf{What is implemented}\par\vspace{0.15cm}
+      Activation capture at validated sites, compact sharding, calibrated risk probes, layer screening, immutable selection artifacts, and replayable finalization.
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textbf{Why E2 exists}\par\vspace{0.15cm}
+      Steering should target a location where correct and incorrect outcomes are measurably separable. Choosing a layer first and testing it later would invite cherry-picking.
+    \end{column}
+  \end{columns}
+  \vspace{0.35cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.4em]{progress remaining}
+    \textbf{Status:} software and replay paths are validated; scientific capture remains blocked until E1 supplies verified outcome labels.
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{Static and established baselines come first}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textbf{E3 --- static steering}\par\vspace{0.12cm}
+      Dense correct-minus-incorrect vectors, layer--alpha--token-scope search, random controls, and label-permutation controls.\par\vspace{0.25cm}
+      \textbf{Why:} establish the simplest causal intervention and test whether changes exceed arbitrary perturbation.
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textbf{E4 --- established methods}\par\vspace{0.12cm}
+      Capability reports and execution receipts for CAA, ITI, ACT, SADI, and TruthX, followed by screening and promotion gates.\par\vspace{0.25cm}
+      \textbf{Why:} compare against prior approaches before claiming that the new adaptive controller adds value.
+    \end{column}
+  \end{columns}
+  \vspace{0.3cm}
+  {\footnotesize\color{Muted}\textbf{Status:} independently accepted at the software/replay level; experimental execution remains blocked by E1.}
+\end{frame}
+
+\begin{frame}{E5 and E6 contain the core causal tests}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textcolor{Green}{\bfseries E5 --- adaptive steering: implemented}\par\vspace{0.15cm}
+      The matched-budget grid, M1-R/M1-P identity lookup, split provenance, exact alpha binding, signed execution receipts, finalization, and replay checks are implemented.\par\vspace{0.3cm}
+      \textbf{Why it matters:} otherwise an adaptive win could come from the wrong baseline, leaked split, or unequal intervention budget.
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textcolor{Green}{\bfseries E6 --- knowledge vs. refusal: implemented}\par\vspace{0.15cm}
+      Teacher-forced likelihoods, forced-answer ranks, signed row bindings, the registered knowledge-recovery gate, terminal finalizer, and bundle replay are implemented.\par\vspace{0.3cm}
+      \textbf{Why it matters:} E6 determines whether E5 changes factual answer selection or only teaches the model to decline.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{E7--E10 build the final system}
+  \footnotesize
+  \renewcommand{\arraystretch}{1.10}
+  \begin{tabular}{@{}>{\bfseries\raggedright\arraybackslash}p{0.12\textwidth} >{\raggedright\arraybackslash}p{0.31\textwidth} >{\raggedright\arraybackslash}p{0.47\textwidth}@{}}
+    \toprule
+    Phase & Planned test & Why it is needed \\
+    \midrule
+    E7 & Coordinate and sparse-autoencoder steering & Test whether a smaller feature set preserves the factuality effect with fewer collateral changes. \\
+    E8 & Protected subspaces for refusal, safety, and language & Prevent a factuality direction from unintentionally changing protected behavior. \\
+    E9 & Full prompt $\times$ method factorial & Measure prompt-only, steering-only, combined, and interaction effects under paraphrases. \\
+    E10 & Frozen composite policy and untouched confirmation & Combine only independently selected parts, run once, and estimate risk--coverage with utility/safety constraints. \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.12cm}
+  {\scriptsize\color{Muted}Current state: phase orchestration, immutable artifacts, gates, statistics, and replay are implemented; scientific Qwen runs remain.}
+\end{frame}
+
+\begin{frame}{Viability is established; efficacy remains open}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.31\textwidth}
+      \textcolor{Green}{\bfseries Established}\par\vspace{0.15cm}
+      The exact Qwen artifact, runtime policy, study namespace, and E0--E10 software contracts are frozen and replayable.
+    \end{column}
+    \begin{column}{0.31\textwidth}
+      \textcolor{Blue}{\bfseries Next execution}\par\vspace{0.15cm}
+      Run live M4 Max preflight, Qwen E0, then a fresh Qwen E1. The preserved Bonsai partial E1 is excluded.
+    \end{column}
+    \begin{column}{0.31\textwidth}
+      \textcolor{Amber}{\bfseries Evidence boundary}\par\vspace{0.15cm}
+      Implemented software is not evidence that steering improves factuality; claims require the frozen scientific runs and confirmatory analyses.
+    \end{column}
+  \end{columns}
+  \vspace{0.38cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.48em]{progress done}
+    \textbf{Honest current conclusion:} the experimental machinery is ready for independent validation and Qwen execution. The central scientific hypotheses remain open.
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{Next: complete the evidence chain}
+  \footnotesize
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \textbf{1. Admit the Qwen runtime}\par
+      Download and verify the exact snapshot, run live M4 Max hook preflight, then execute and finalize a fresh Qwen E0.\par\vspace{0.25cm}
+      \textbf{2. Run Qwen E1--E4 in order}\par
+      Capture only frozen activations, calibrate probes, select static controls, and compare established baselines without touching confirmatory sets.
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \textbf{3. Execute E5--E8 development}\par
+      Fit the adaptive controller, test knowledge recovery, run sparse causal audits, and check protected-behavior non-inferiority.\par\vspace{0.25cm}
+      \textbf{4. Reserve E9/E10 only after replay}\par
+      Require prerequisite ledgers, registered gates, immutable artifacts, statistical analysis, side-effect checks, and independent validation.
+    \end{column}
+  \end{columns}
+  \vspace{0.2cm}
+  \begin{beamercolorbox}[rounded=true,sep=0.3em]{progress done}
+    \textbf{Final decision rule:} success means lower hallucination risk at meaningful matched coverage, with correct answers preserved and no material safety, language, or utility regression.
+  \end{beamercolorbox}
+\end{frame}
+
+\end{document}

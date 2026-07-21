@@ -1,0 +1,12 @@
+schema_version: 1
+benchmark:
+  name: aa_omniscience_public_600
+  repository: ArtificialAnalysis/AA-Omniscience-Public
+  revision: 4a8ffc87c4650054825fb767fe0da4a4fc97ff32
+  config: default
+  split: train
+  format: csv
+  question_column: question
+  answer_column: answer
+  id_column: question_id
+

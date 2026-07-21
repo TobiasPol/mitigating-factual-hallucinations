@@ -1,0 +1,12 @@
+schema_version: 1
+benchmark:
+  name: triviaqa
+  repository: lighteval/trivia_qa
+  revision: d2ff7f468d3642dbd33123596331950db8a63d0e
+  config: rc.nocontext
+  split: train
+  format: parquet
+  question_column: question
+  answer_column: answer
+  id_column: question_id
+

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "repository": "prism-ml/Ternary-Bonsai-27B-AWQ-4bit",
+  "revision": "86ef694a7e78a8c629840fddc281cbdfa65eef13",
+  "file_count": 24,
+  "total_size_bytes": 18721522970,
+  "files": [
+    {"path": ".gitattributes", "size_bytes": 1570, "digest_algorithm": "git-blob-sha1", "digest": "52373fe24473b1aa44333d318f578ae6bf04b49b"},
+    {"path": "LICENSE.txt", "size_bytes": 10174, "digest_algorithm": "git-blob-sha1", "digest": "66a27ec5ff940d3a9652d2948746ebac4c9d0188"},
+    {"path": "NOTICE.txt", "size_bytes": 411, "digest_algorithm": "git-blob-sha1", "digest": "09a2d121096b1e3cc108545c79259ffaa3319807"},
+    {"path": "README.md", "size_bytes": 1087, "digest_algorithm": "git-blob-sha1", "digest": "daf62cd8ab2d2a97d4c9b753b12d5f255f65ffd8"},
+    {"path": "chat_template.jinja", "size_bytes": 7764, "digest_algorithm": "git-blob-sha1", "digest": "a8755d827c0a7b614c246c4060dfd58ab352a8ff"},
+    {"path": "config.json", "size_bytes": 9765, "digest_algorithm": "git-blob-sha1", "digest": "aad3519c33461969371d94f242fddeb6d00005f5"},
+    {"path": "generation_config.json", "size_bytes": 202, "digest_algorithm": "git-blob-sha1", "digest": "023756cfadf88e5bf69eefeee3e172f38c448d64"},
+    {"path": "merges.txt", "size_bytes": 3353259, "digest_algorithm": "git-blob-sha1", "digest": "a494e019ca1502219fd0128658b979e5f05ae8e8"},
+    {"path": "model-00001-of-00009.safetensors", "size_bytes": 2542796896, "digest_algorithm": "sha256", "digest": "f42e4fce7106e1c8b6d5c677db7bb9015bc30b0bf2cb47b9fc7ab95f5b211f44"},
+    {"path": "model-00002-of-00009.safetensors", "size_bytes": 2542796928, "digest_algorithm": "sha256", "digest": "bb1fe5639f758d9dd4e1722ea8d63fcfcc45f527614d4273a737a9d3b98603b3"},
+    {"path": "model-00003-of-00009.safetensors", "size_bytes": 2139885176, "digest_algorithm": "sha256", "digest": "29f6a28833d284c777de5affb1d0228bd8c6c59fc65806d7f96d02dcf62b4859"},
+    {"path": "model-00004-of-00009.safetensors", "size_bytes": 2133383336, "digest_algorithm": "sha256", "digest": "4a332a3d36571430f274fe3c131c1ed99cace9b545677a1c1623c5d005656ec3"},
+    {"path": "model-00005-of-00009.safetensors", "size_bytes": 2133383336, "digest_algorithm": "sha256", "digest": "cd20c9b85c625e5d9834557ee128edddd688860e27f846d0dfff3c49a55fc45a"},
+    {"path": "model-00006-of-00009.safetensors", "size_bytes": 2147001728, "digest_algorithm": "sha256", "digest": "341d4cf85eae5ab671f7dd54ef3b7e7f9fe3233ba3ed2076ba8d8a4540f4dad0"},
+    {"path": "model-00007-of-00009.safetensors", "size_bytes": 2111570216, "digest_algorithm": "sha256", "digest": "5e66648703cdc4f9f73fe9b29366174416a7d7a16ff484f006ca9411bf3bba8b"},
+    {"path": "model-00008-of-00009.safetensors", "size_bytes": 2138080968, "digest_algorithm": "sha256", "digest": "be363e230b6b64f9da985ecbe619370e5fc03a7d78e309bd5190dd1d507948bc"},
+    {"path": "model-00009-of-00009.safetensors", "size_bytes": 809502000, "digest_algorithm": "sha256", "digest": "b329fa7e0bb7b3285dcbb8dda95406d121171963d725483adaea2edb810c5866"},
+    {"path": "model.safetensors.index.json", "size_bytes": 189876, "digest_algorithm": "git-blob-sha1", "digest": "46830c22355942a0cf53a74981829ae24deb48e9"},
+    {"path": "preprocessor_config.json", "size_bytes": 390, "digest_algorithm": "git-blob-sha1", "digest": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"},
+    {"path": "processor_config.json", "size_bytes": 44, "digest_algorithm": "git-blob-sha1", "digest": "3278521d24807e2c82cb7bf91b14792f0728762b"},
+    {"path": "tokenizer.json", "size_bytes": 12807982, "digest_algorithm": "sha256", "digest": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"},
+    {"path": "tokenizer_config.json", "size_bytes": 16718, "digest_algorithm": "git-blob-sha1", "digest": "28d96ff303d1d20350185caf4bf037045916ed35"},
+    {"path": "video_preprocessor_config.json", "size_bytes": 385, "digest_algorithm": "git-blob-sha1", "digest": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"},
+    {"path": "vocab.json", "size_bytes": 6722759, "digest_algorithm": "git-blob-sha1", "digest": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"}
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "schema_version": 2,
+  "amendment_id": "m4max48-qwen36-single-mlx-model-2026-07-17",
+  "approved_on": "2026-07-17",
+  "approval": "explicit-user-instruction-qwen3.6-27b-m4-max-48gb-apple-mlx",
+  "reason": "Replace the superseded Bonsai pilot with one exactly pinned Qwen/Qwen3.6-27B deployment represented by its uniform 4-bit MLX conversion. Execute E0-E10 later on the approved Apple M4 Max with 48 GiB unified memory. Preserve the completed Bonsai E0 and partial Bonsai E1 byte-for-byte, but exclude both from the Qwen scientific lineage.",
+  "hardware_envelope": {
+    "chip": "Apple M4 Max",
+    "unified_memory_bytes": 51539607552,
+    "architecture": "arm64",
+    "accelerator": "Apple Metal"
+  },
+  "study_namespace": {
+    "id": "qwen36-27b-mlx4-m4max48-v1",
+    "artifact_root": "artifacts/studies/qwen36-27b-mlx4-m4max48-v1",
+    "rule": "all-new-e0-through-e10-work-and-ledgers-must-live-under-this-root"
+  },
+  "superseded_models": [
+    {
+      "name": "gemma4-e4b-it",
+      "repository": "google/gemma-4-E4B-it",
+      "revision": "a4c2d58be94dda072b918d9db64ee85c8ed34e3f",
+      "scientific_status": "superseded-before-complete-e0"
+    },
+    {
+      "name": "ternary-bonsai-27b-awq",
+      "repository": "prism-ml/Ternary-Bonsai-27B-AWQ-4bit",
+      "revision": "86ef694a7e78a8c629840fddc281cbdfa65eef13",
+      "scientific_status": "superseded-before-complete-e0"
+    },
+    {
+      "name": "ternary-bonsai-27b-gguf",
+      "repository": "prism-ml/Ternary-Bonsai-27B-gguf",
+      "revision": "20e435f518bd5b882795954aba81e80a91894321",
+      "scientific_status": "superseded-exploratory-e0-leg-retained"
+    },
+    {
+      "name": "gemma4-e4b-it-qat-mobile",
+      "repository": "google/gemma-4-E4B-it-qat-mobile-transformers",
+      "revision": "9a78a5adac7bca7a9e421634e4b58f41ca7cbca3",
+      "scientific_status": "superseded-local-runtime-too-slow"
+    },
+    {
+      "name": "ternary-bonsai-4b-unpacked",
+      "repository": "prism-ml/Ternary-Bonsai-4B-unpacked",
+      "revision": "4485fae7a00129467b9329b738110d88b2942a1a",
+      "scientific_status": "superseded-before-complete-e0"
+    },
+    {
+      "name": "ternary-bonsai-4b-gguf",
+      "repository": "prism-ml/Ternary-Bonsai-4B-gguf",
+      "revision": "a3eb42bafe873f9686bc97486c43b72ef7d75ec8",
+      "scientific_status": "superseded-exploratory-e0-leg-retained"
+    },
+    {
+      "name": "bonsai-27b-mlx-1bit",
+      "repository": "prism-ml/Bonsai-27B-mlx-1bit",
+      "revision": "ef22f239c670078e1507f9769bcaa66657332b96",
+      "scientific_status": "superseded-pilot-complete-e0-partial-e1-retained-immutable",
+      "retained_e0_manifest_digest": "335967628f31238d2eec4475cd0bc1bacaee7b330cedf9391105fd18b48a5f09",
+      "retained_e0_completion_digest": "4579c06e0111abcc004bafbbb06ef1793b8e95e05cf9b49f5cdb17781d037a28",
+      "retained_e0_artifact_sha256": {
+        "artifacts/runs/E0": "e8a52a3aafa2aa3bac96cb18cef06bb008c1e4a5fa974e34ea7fd5a5a31dbef1",
+        "artifacts/e0/bonsai-27b-mlx": "5f851f9b54fd6a4b44fd680e69d30868751fdb38d0e0cd630080be3563425216",
+        "artifacts/e0/bonsai-27b-mlx-work": "a0ae226c049c21d56214c2f5e6a54325cba8a78f27c59606127c89528d9aead1",
+        "artifacts/e0/scientific-completion": "3106568517de65c2c502297f3c6f35e6ede21eb0cd4d54692e0d29fe7bb8fc55"
+      },
+      "partial_e1_records": 17244,
+      "retained_artifact_sha256": {
+        "artifacts/runs/E1/contract.json": "2c16da58c45434d7b68dab17d1ef01ebbdff6a5fb64276c5a654d3c237b254ca",
+        "artifacts/runs/E1/creation-evidence.json": "6c62c65ce3b23628fa05afe4da655f1cf590ce17088e62c4bd6eff29c15123ca",
+        "artifacts/work/E1/plan.json": "9284b3f5a8d9e5d8a69320b1a66ce97f62fb1fff2d84e7c66f1d252398352955",
+        "artifacts/work/E1/generations.jsonl": "66ee22df1a8341b2dbf9e53b72a61963c0932cf35269248b2931768e76547183",
+        "artifacts/work/E1/generation-sessions.jsonl": "f062b83701bc7dea4ea605f63c7b5eefef7d844d41362b3f7e70b49c07b02162",
+        "artifacts/checkpoints/E1-generation.json": "c0041b226ee6afdcc6c8fd2d484d24bd1318694cb111e4bdc7b0502974ce12e9"
+      }
+    }
+  ],
+  "active_models": [
+    {
+      "name": "qwen3.6-27b-mlx-4bit",
+      "upstream_model": "Qwen/Qwen3.6-27B",
+      "repository": "mlx-community/Qwen3.6-27B-4bit",
+      "revision": "c000ac2c2057d94be3fa931000c31723aac53282",
+      "runtime": "mlx",
+      "quantization": "affine-g64-mlx-4bit",
+      "artifact_size_bytes": 16081490064,
+      "model_config": "configs/models/qwen3.6-27b-mlx-4bit.yaml",
+      "model_config_sha256": "ea740d313de1cdce961fb8661e4aff8f2787b8e58783ee32cf727e448001c353",
+      "snapshot_manifest": "configs/models/qwen3.6-27b-mlx-4bit.snapshot.json",
+      "snapshot_manifest_sha256": "d19fe3ddc525b000bd8d00b89d869e935c5b4652d95bcc596ca100c29f77b79f",
+      "runtime_policy": "configs/runtimes/qwen3.6-27b-mlx-4bit-policy.json",
+      "runtime_policy_sha256": "1f67e5f0c390a14146f202b90ff1dfc23852a48f9193f1a71c7c7a26524b8c9e",
+      "runtime_policy_digest": "f2bef0363effa924f96fb8609f06709a81c0faf0a5fc875fd47ee2e40a0b00a0"
+    }
+  ],
+  "preserved_model_independent_evidence": {
+    "runtime_validation_cohort_manifest_digest": "bb89b2da16d899f8a38c0b090f84d1e43ffd1132e0fe0693295230b804f44442",
+    "contamination_manifest_digest": "ae79350a5e2f6310fccec4b91e9ef55821996f1797baacb21fb7de3d7b6131f2",
+    "manual_review_manifest_digest": "02f12825cb2b362b0bbbdde378f2018c15a0859d262bcbf3df2fb4ac9bfd02d6"
+  },
+  "required_effect": {
+    "e0": "rerun-qwen-runtime-validation-and-complete-a-new-e0-ledger-in-the-qwen-study-namespace",
+    "e1_through_e10": "run-only-the-sole-active-qwen-mlx-model-in-the-qwen-study-namespace",
+    "superseded_artifacts": "retain-immutable-and-exclude-from-qwen-scientific-gates",
+    "runtime_preflight": "require-a-live-passed-m4-max-receipt-before-qwen-e0",
+    "colab": "retired"
+  },
+  "amendment_digest": "d0a26583a42620a29a4c6bb1968f3995b8c5664d9cc0703692be66041c478dd8"
+}

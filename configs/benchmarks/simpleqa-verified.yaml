@@ -1,0 +1,12 @@
+schema_version: 1
+benchmark:
+  name: simpleqa_verified
+  repository: google/simpleqa-verified
+  revision: 0dc97e0d28d8233463e005cdc4475cc2a13ba2dc
+  config: simpleqa_verified
+  split: eval
+  format: csv
+  question_column: problem
+  answer_column: answer
+  id_column: original_index
+

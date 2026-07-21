@@ -1,0 +1,29 @@
+schema_version: 1
+semantic_contamination:
+  model_repository: sentence-transformers/all-MiniLM-L6-v2
+  model_revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+  model_artifact_tree_sha256: 86463f8488182d3b1b031610daa9d4e5ce24032ec34b9f06dd2006c21553a4f1
+  required_files:
+    - 1_Pooling/config.json
+    - README.md
+    - config.json
+    - config_sentence_transformers.json
+    - model.safetensors
+    - modules.json
+    - sentence_bert_config.json
+    - special_tokens_map.json
+    - tokenizer.json
+    - tokenizer_config.json
+    - vocab.txt
+  pooling: mean
+  normalize_embeddings: true
+  max_length: 256
+  embedding_dimension: 384
+  lexical_ngram_threshold: 0.8
+  semantic_similarity_threshold: 0.9
+  review_top_k: 200
+  device: cpu
+  dtype: float32
+  encode_batch_size: 128
+  similarity_batch_size: 16
+  torch_num_threads: 4

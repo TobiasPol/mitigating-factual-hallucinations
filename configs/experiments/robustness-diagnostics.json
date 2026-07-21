@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "diagnostic_id": "prompt-rq1-robustness-v1",
+  "freeze_boundary": "freeze-before-E9-and-never-use-for-E9-or-E10-component-selection",
+  "reviewed_split_binding": {
+    "manifest_digest": "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148",
+    "artifact_sha256": "3ceaf111654b80e34abd568853f64bba894fc7c6d7a81950c2868f3584a187f4",
+    "required_e1_state": "complete-qwen3.6-27b-mlx-4bit-E1-ledger-deduplicated-splits-input"
+  },
+  "prompt_paraphrase": {
+    "selection_seed": 1701,
+    "selection_algorithm": "sha256(seed:benchmark:question-identity)-ascending-v1",
+    "generation_seed": 17,
+    "questions_per_benchmark": 200,
+    "benchmarks": {
+      "triviaqa": "T-test",
+      "simpleqa_verified": "simpleqa-eval",
+      "aa_omniscience_public_600": "aa-eval"
+    },
+    "methods": ["M0", "M1", "M2", "M3", "M4", "M5"],
+    "variants": [
+      {
+        "prompt_id": "P0-paraphrase-1",
+        "base_prompt_id": "P0-neutral",
+        "text": "Act as a helpful assistant and answer the user's factual question."
+      },
+      {
+        "prompt_id": "P0-paraphrase-2",
+        "base_prompt_id": "P0-neutral",
+        "text": "Please provide a helpful answer to the factual question asked by the user."
+      },
+      {
+        "prompt_id": "P0-paraphrase-3",
+        "base_prompt_id": "P0-neutral",
+        "text": "Respond helpfully to the user's question of fact."
+      },
+      {
+        "prompt_id": "P0-paraphrase-4",
+        "base_prompt_id": "P0-neutral",
+        "text": "Help the user by answering their factual question."
+      },
+      {
+        "prompt_id": "P0-paraphrase-5",
+        "base_prompt_id": "P0-neutral",
+        "text": "Answer the user's factual query as a helpful assistant."
+      },
+      {
+        "prompt_id": "P2-paraphrase-1",
+        "base_prompt_id": "P2-calibrated-abstention",
+        "text": "Answer only if you are confident the response is correct. If you are not, reply exactly with “I don't know.” Never guess."
+      },
+      {
+        "prompt_id": "P2-paraphrase-2",
+        "base_prompt_id": "P2-calibrated-abstention",
+        "text": "Provide an answer only when you have sufficient confidence in its correctness; otherwise say exactly “I don't know.” Do not guess."
+      },
+      {
+        "prompt_id": "P2-paraphrase-3",
+        "base_prompt_id": "P2-calibrated-abstention",
+        "text": "When you are sufficiently sure the answer is correct, answer it. In every other case respond exactly “I don't know.” Avoid guessing."
+      },
+      {
+        "prompt_id": "P2-paraphrase-4",
+        "base_prompt_id": "P2-calibrated-abstention",
+        "text": "Only give a correct answer you are confident about. Otherwise return exactly “I don't know.” Do not make a guess."
+      },
+      {
+        "prompt_id": "P2-paraphrase-5",
+        "base_prompt_id": "P2-calibrated-abstention",
+        "text": "Respond with an answer only if your confidence that it is correct is high enough; if not, respond exactly “I don't know.” Never guess."
+      }
+    ]
+  },
+  "rq1_generalization": {
+    "benchmark": "triviaqa",
+    "semantic_fold_count": 10,
+    "semantic_group_algorithm": "entity-alias-connected-components-from-reviewed-split-v1",
+    "fold_assignment": "uint64(first-16-hex(semantic-group-sha256))-mod-10",
+    "reviewed_source_partitions": ["T-steer", "T-controller", "T-dev"],
+    "controller_subdivision_algorithm": "exact-E2-semantic-group-subdivision-v1",
+    "controller_calibration_rows": 1000,
+    "controller_subdivision_seed": 17,
+    "source_fit_partitions": ["T-steer", "T-controller-train"],
+    "source_calibration_partition": "T-controller-calibration",
+    "held_out_evaluation_partition": "T-dev",
+    "training_prompt": "P0-neutral",
+    "evaluation_prompts": ["P0-neutral", "P2-calibrated-abstention"],
+    "methods": ["M1", "M3"],
+    "adaptation_regimes": {
+      "source-frozen-control": {
+        "methods": ["M1"],
+        "fit_on_held_out_calibration": [],
+        "frozen_on_source_folds": ["execution_component", "all_policy_fields"]
+      },
+      "calibration-only": {
+        "methods": ["M3"],
+        "fit_on_held_out_calibration": ["risk_threshold", "abstention_threshold"],
+        "frozen_on_source_folds": ["vector_bank", "router", "directions", "risk_probe", "layer_selector", "alpha_controller", "router_architecture", "candidate_layers", "candidate_sites", "token_scopes", "sparsity", "alpha_policy_family", "likely_unknown_threshold", "execution_public_key"]
+      },
+      "full-vector-bank-relearning": {
+        "methods": ["M3"],
+        "fit_on_held_out_calibration": ["vector_bank", "router", "risk_threshold", "abstention_threshold"],
+        "frozen_on_source_folds": ["risk_probe", "layer_selector", "router_architecture", "candidate_layers", "candidate_sites", "token_scopes", "sparsity", "alpha_controller", "alpha_policy_family", "likely_unknown_threshold", "execution_public_key"]
+      }
+    },
+    "threshold_calibration_algorithm": "balanced-accuracy-over-observed-score-cutpoints-tie-smallest-threshold-v1",
+    "m3_refit_hyperparameters": {
+      "vector_seed": 17,
+      "minimum_class_count": 1,
+      "router_seed": 17,
+      "router_hidden_width": 64,
+      "router_epochs": 300,
+      "distance_temperature": 1.0,
+      "risk_hidden_width": 64,
+      "risk_epochs": 400,
+      "risk_learning_rate": 0.03,
+      "risk_weight_decay": 0.0001,
+      "risk_class_balanced": true,
+      "risk_seed": 17,
+      "calibration_kind": "temperature",
+      "layer_seed": 17,
+      "layer_epochs": 300
+    },
+    "full_relearning_subdivision_algorithm": "semantic-fold-preserve-preregistered-partitions-v1",
+    "test_data_policy": "held-out-fold-T-dev-is-evaluation-only-and-never-used-for-fitting",
+    "target_benchmark_tuning_policy": "no-SimpleQA-AA-E9-or-E10-row-may-fit-or-select-any-component"
+  },
+  "config_digest": "06da1e24b298361df6cd6cdad7753813001f8b09b8f12598d2b87f8a7d6a69fd"
+}

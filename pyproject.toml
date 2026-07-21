@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mfh-research"
+version = "0.1.0"
+description = "Risk-gated activation steering research framework"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Mitigating Factual Hallucinations research project" }]
+dependencies = [
+  "cryptography>=44,<47",
+  "numpy>=1.26,<3",
+  "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+research = [
+  "accelerate>=1.2,<2",
+  "datasets>=3.2,<5",
+  "huggingface-hub>=0.28,<2",
+  "pandas>=2.2,<4",
+  "safetensors>=0.5,<1",
+  "scikit-learn>=1.4,<2",
+  "scipy>=1.12,<2",
+  "statsmodels>=0.14,<1",
+  "torch>=2.5,<3",
+  "transformers>=4.48,<6",
+]
+mlx-macos = [
+  "gguf==0.18.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "mlx==0.31.2; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "mlx-lm==0.31.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "numpy==2.4.2; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "protobuf==7.34.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "safetensors==0.7.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sentencepiece==0.2.1; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "tokenizers==0.22.2; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "torch==2.10.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "transformers==5.2.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+dev = [
+  "mypy>=1.14,<2",
+  "nbformat>=5.10,<6",
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.9,<1",
+  "safetensors>=0.5,<1",
+  "torch>=2.5,<3",
+  "transformers>=4.48,<6",
+  "types-PyYAML>=6.0,<7",
+]
+
+[project.scripts]
+mfh = "mfh.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mfh"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["tmp"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["mfh"]

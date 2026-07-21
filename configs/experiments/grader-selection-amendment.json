@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "amendment_id": "openrouter-aa-grader-successor-2026-07-17",
+  "approved_on": "2026-07-17",
+  "approval": "explicit-user-instruction-use-google-gemini-2.5-flash-via-openrouter",
+  "timing": "before-any-e1-generation-or-grading",
+  "reason": "The preregistered google/gemini-2.5-flash-preview-09-2025 endpoint is retired on OpenRouter and returned HTTP 404 with no available endpoint. Use the currently available stable google/gemini-2.5-flash checkpoint while preserving the released AA grading prompt, parsing, label mapping, temperature, reasoning setting, and failure policy.",
+  "transport": {
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "api_key_environment_variable": "OPENROUTER_API_KEY",
+    "allow_model_fallbacks": false,
+    "require_parameter_support": true,
+    "catalog_endpoint": "https://openrouter.ai/api/v1/models",
+    "catalog_observed_on": "2026-07-17",
+    "catalog_artifact": "artifacts/graders/openrouter/catalog-2026-07-17.json",
+    "catalog_response_sha256": "3dbeb1f9a71faed5435d6c1ce3f4ae6a0b388cd911b0d1ac7e6b845d930b2045"
+  },
+  "adapter_semantic_digest": "01edc3c06120b4bf772589f87b60576aaff981e8d59a9a33a6fe0c1ca4c3ec8b",
+  "graders": {
+    "simpleqa_verified": {
+      "requested_model": "openai/gpt-4.1",
+      "required_canonical_slug": "openai/gpt-4.1-2025-04-14",
+      "required_provider_slug": "openai",
+      "adapter_deviations_from_pinned_notebook": {
+        "transport": "OpenRouter exact-provider route instead of the direct OpenAI client",
+        "temperature": "explicit zero instead of an omitted provider default",
+        "parsing": "atomic A/B/C label only instead of regex and keyword recovery",
+        "attempts": "up to three transient retries instead of one invocation",
+        "terminal_failure": "unscorable U instead of defaulting an unparseable response to C/not-attempted"
+      },
+      "status": "unchanged-from-frozen-grader"
+    },
+    "aa_omniscience_public_600": {
+      "superseded_model": "google/gemini-2.5-flash-preview",
+      "superseded_revision": "gemini-2.5-flash-preview-09-2025",
+      "superseded_openrouter_slug": "google/gemini-2.5-flash-preview-09-2025",
+      "replacement_model": "google/gemini-2.5-flash",
+      "replacement_revision": "gemini-2.5-flash",
+      "required_canonical_slug": "google/gemini-2.5-flash",
+      "required_provider_slug": "google-ai-studio",
+      "status": "pre-e1-protocol-amendment"
+    }
+  },
+  "reporting_requirement": "Label all AA automated outcomes as stable-Gemini-2.5-Flash rubric grades and do not claim exact grader-checkpoint comparability with the released preview-based implementation. Describe SimpleQA outcomes as released-rubric GPT-4.1 grades under the study's fail-closed OpenRouter adapter, not exact execution of the pinned starter notebook.",
+  "amendment_digest": "c2296baa709740ef11c78656f9b58033a7c9f5c764d5594b0ec0a4702ddff3aa"
+}

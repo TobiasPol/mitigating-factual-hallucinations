@@ -1,0 +1,212 @@
+schema_version: 1
+study_id: mitigating-factual-hallucinations
+
+phases:
+  - phase: E0
+    title: Runtime and checkpoint validation
+    mode: validation
+    purpose: Validate the exact local Qwen 3.6 27B 4-bit MLX checkpoint, deterministic decoding, intervention sites, latency, and memory.
+    prerequisites: []
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [shared_benign_factual_500]
+    partitions: [runtime-validation]
+    prompts: [P0-neutral]
+    methods: [M0]
+    required_inputs: [model_artifacts, tokenizers, chat_templates, runtime_receipt, hook_preflight]
+    outputs: [correctness, abstention, answer_length, latency, memory, intervention_site_validation]
+    gates: [checkpoint_identity, deterministic_decode, chat_template_identity, mlx_runtime_identity]
+    tuning_allowed: true
+    one_shot: false
+    factorial: false
+    question_limit: 500
+    freeze_fields: []
+
+  - phase: E1
+    title: Baseline prompt characterization
+    mode: development
+    purpose: Establish prompt-only C/P/I/A distributions and model-specific outcome labels.
+    prerequisites: [E0]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa, simpleqa_verified, aa_omniscience_public_600]
+    partitions: [T-controller, T-dev, T-test, simpleqa-eval, aa-eval]
+    prompts: [P0-neutral, P1-direct, P2-calibrated-abstention]
+    methods: [M0]
+    required_inputs: [deduplicated_splits, grader_bundle, inference_protocol]
+    outputs: [baseline_records, prompt_metrics, outcome_labels]
+    gates: [coverage_reported, over_refusal_reported]
+    tuning_allowed: true
+    one_shot: false
+    factorial: true
+    question_limit: null
+    freeze_fields: []
+
+  - phase: E2
+    title: Activation separability and knowledge-boundary probing
+    mode: development
+    purpose: Test whether prompt-end activations predict C/I/A beyond trivial confidence baselines.
+    prerequisites: [E1]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa, simpleqa_verified, aa_omniscience_public_600]
+    partitions: [T-controller-train, T-controller-calibration, T-dev, simpleqa-eval, aa-eval]
+    prompts: [P0-neutral, P3-forced-answer]
+    methods: [probe-logistic, probe-two-layer-mlp]
+    required_inputs: [E1_outcome_labels, activation_feature_schemas]
+    outputs: [calibrated_probes, separability_metrics, ood_probe_metrics]
+    gates: [probe_beats_confidence_baselines]
+    tuning_allowed: true
+    one_shot: false
+    factorial: false
+    question_limit: null
+    freeze_fields: []
+
+  - phase: E3
+    title: Static steering replication
+    mode: development
+    purpose: Replicate residual and post-MLP centroid steering with sweeps and causal controls.
+    prerequisites: [E1, E2]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa]
+    partitions: [T-steer, T-dev]
+    prompts: [P0-neutral, P2-calibrated-abstention, P3-forced-answer]
+    methods: [M0, M1-R, M1-P, shuffled-label, random-norm, opposite, unrelated-layer, gaussian, zero-hook, cross-prompt]
+    required_inputs: [E1_outcome_labels, activation_feature_schemas]
+    outputs: [static_vectors, layer_site_alpha_scope_sweeps, causal_control_results]
+    gates: [factuality_gain_not_explained_by_coverage_loss]
+    tuning_allowed: true
+    one_shot: false
+    factorial: false
+    question_limit: null
+    freeze_fields: []
+
+  - phase: E4
+    title: Existing baseline comparison
+    mode: development
+    purpose: Screen centroid, CAA, technically feasible head, adaptive, and autoencoder baselines.
+    prerequisites: [E3]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa]
+    partitions: [T-dev-screen-2000]
+    prompts: [P0-neutral, P2-calibrated-abstention]
+    methods: [M1, M2, ITI-if-feasible, ACT-or-SADI, TruthX-if-feasible]
+    required_inputs: [E3_static_vectors, E2_calibrated_probes]
+    outputs: [external_baseline_screen, promoted_baselines]
+    gates: [promotion_decision_frozen]
+    tuning_allowed: true
+    one_shot: false
+    factorial: false
+    question_limit: 2000
+    freeze_fields: []
+
+  - phase: E5
+    title: Prompt-conditioned adaptive steering
+    mode: development
+    purpose: Train TriviaQA-only vector routing, calibrated risk gating, and dynamic alpha policies.
+    prerequisites: [E2, E3, E4]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa]
+    partitions: [T-steer, T-controller-train, T-controller-calibration, T-dev]
+    prompts: [P0-neutral, P2-calibrated-abstention]
+    methods: [M1, M3]
+    required_inputs: [E2_calibrated_probes, E3_static_vectors, E4_promoted_baselines]
+    outputs: [vector_banks, routers, alpha_controllers, adaptive_ablations, rq1_semantic_fold_generalization, rq1_calibration_vs_vector_relearning]
+    gates: [matched_coverage, matched_abstention, matched_norm, matched_latency]
+    tuning_allowed: true
+    one_shot: false
+    factorial: false
+    question_limit: null
+    freeze_fields: []
+
+  - phase: E6
+    title: Knowledge expression versus abstention
+    mode: development
+    purpose: Decompose outcome transitions and gold-answer versus abstention likelihood changes.
+    prerequisites: [E3, E5]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa, simpleqa_verified, aa_omniscience_public_600]
+    partitions: [T-dev, simpleqa-eval, aa-eval]
+    prompts: [P0-neutral, P2-calibrated-abstention, P3-forced-answer]
+    methods: [M0, M1, M3]
+    required_inputs: [E3_static_vectors, E5_adaptive_controllers]
+    outputs: [paired_transitions, gold_alias_likelihoods, abstention_likelihoods, answer_ranks]
+    gates: [knowledge_recovery_separated_from_abstention_substitution]
+    tuning_allowed: true
+    one_shot: false
+    factorial: false
+    question_limit: null
+    freeze_fields: []
+
+  - phase: E7
+    title: Sparse steering
+    mode: development
+    purpose: Evaluate coordinate sparsity and causally validated sparse-autoencoder interventions.
+    prerequisites: [E3, E5, E6]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa, ifeval, xstest, strongreject_or_harmbench, language_consistency]
+    partitions: [T-steer, sae-train, sae-validation, T-dev]
+    prompts: [P0-neutral, P2-calibrated-abstention]
+    methods: [M0, M4a, M4b]
+    required_inputs: [E3_static_vectors, E5_adaptive_controllers, separate_sae_corpus, frozen_sae_seed_runs, frozen_tsteer_questions, frozen_side_effect_scorers]
+    outputs: [coordinate_sparse_vectors, sae_checkpoints, causal_feature_evidence]
+    gates: [held_out_reconstruction, feature_stability, individual_causal_evidence, protected_behavior_audit]
+    tuning_allowed: true
+    one_shot: false
+    factorial: false
+    question_limit: null
+    freeze_fields: []
+
+  - phase: E8
+    title: Disentanglement and protected steering
+    mode: development
+    purpose: Compare dense, sparse, and protected directions at matched empirical operating points.
+    prerequisites: [E6, E7]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa, ifeval, mmlu_pro, wikitext103, xstest, strongreject_or_harmbench, language_consistency]
+    partitions: [T-dev, side-effect-construction, side-effect-eval]
+    prompts: [P0-neutral, P2-calibrated-abstention]
+    methods: [M0, M1, M3, M4, M5]
+    required_inputs: [E6_transition_evidence, E7_sparse_artifacts, protected_behavior_activations, frozen_side_effect_scorers]
+    outputs: [protected_subspaces, covariance_directions, matched_operating_points, side_effect_results]
+    gates: [matched_empirical_risk_or_coverage, utility_safety_language_noninferiority]
+    tuning_allowed: true
+    one_shot: false
+    factorial: false
+    question_limit: null
+    freeze_fields: []
+
+  - phase: E9
+    title: Full system-prompt factorial
+    mode: confirmatory
+    purpose: Run the frozen one-model, three-benchmark, three-prompt, six-method matrix.
+    prerequisites: [E0, E1, E2, E3, E4, E5, E6, E7, E8]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa, simpleqa_verified, aa_omniscience_public_600]
+    partitions: [T-test, simpleqa-eval, aa-eval]
+    prompts: [P0-neutral, P1-direct, P2-calibrated-abstention]
+    methods: [M0, M1, M2, M3, M4, M5]
+    required_inputs: [frozen_component_selection, frozen_graders, frozen_evaluation_scripts, frozen_question_bundle, frozen_prompt_paraphrase_schedule]
+    outputs: [confirmatory_generation_records, primary_contrasts, prompt_method_interactions, prompt_paraphrase_diagnostic_results]
+    gates: [complete_paired_matrix, preregistered_analysis_only]
+    tuning_allowed: false
+    one_shot: false
+    factorial: true
+    question_limit: null
+    freeze_fields: []
+
+  - phase: E10
+    title: Frozen composite evaluation
+    mode: confirmatory
+    purpose: Run M6 once after recursively freezing every selected component and evaluation input.
+    prerequisites: [E0, E1, E2, E3, E4, E5, E6, E7, E8, E9]
+    models: [qwen3.6-27b-mlx-4bit]
+    benchmarks: [triviaqa, simpleqa_verified, aa_omniscience_public_600, ifeval, mmlu_pro, wikitext103, xstest, strongreject_or_harmbench, language_consistency]
+    partitions: [T-test, simpleqa-eval, aa-eval, side-effect-eval]
+    prompts: [frozen-selected]
+    methods: [M6]
+    required_inputs: [E9_results, component_selection_manifest, frozen_question_bundle]
+    outputs: [frozen_composite_records, zero_error_bounds, utility_safety_language_results, single_model_scope_statement]
+    gates: [risk_below_epsilon, safety_ok, language_ok, no_refusal_drift, no_post_run_tuning]
+    tuning_allowed: false
+    one_shot: true
+    factorial: false
+    question_limit: null
+    freeze_fields: [model_revision, prompt, risk_threshold, vector_bank, sae_checkpoint, protected_subspace, layer, alpha_policy, abstention_rule, grader, evaluation_scripts]

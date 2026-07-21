@@ -1,0 +1,82 @@
+schema_version: 1
+analysis:
+  research_plan_sha256: 62ba818e2a1e6bf4f011f873c6d80df38e7738dba01a5bc51b981551c34d063f
+  statistical_unit: question
+  bootstrap_resamples: 10000
+  confidence: 0.95
+  alpha: 0.05
+  multiple_comparison_correction: holm
+  paired_tests: [paired_bootstrap, mcnemar_exact, bowker, stuart_maxwell_sensitivity]
+  mixed_effects:
+    response: binary_correctness
+    random_intercept: question_id
+    fixed_effects: [benchmark, method, prompt, method_x_prompt]
+    estimator: statsmodels_binomial_bayes_mixed_glm_map
+  primary_contrasts:
+    - contrast_id: RQ1
+      baseline_methods: [M1]
+      treatment_methods: [M3]
+      prompts: [P0-neutral, P2-calibrated-abstention]
+      benchmarks: [simpleqa_verified, aa_omniscience_public_600]
+      analysis: paired_metric_difference
+    - contrast_id: RQ2
+      baseline_methods: [M0]
+      treatment_methods: [M1, M3]
+      prompts: [P0-neutral, P2-calibrated-abstention]
+      benchmarks: [triviaqa, simpleqa_verified, aa_omniscience_public_600]
+      analysis: transition_decomposition
+    - contrast_id: RQ3
+      baseline_methods: [M1]
+      treatment_methods: [M4, M5]
+      prompts: [P0-neutral, P2-calibrated-abstention]
+      benchmarks: [triviaqa, simpleqa_verified, aa_omniscience_public_600]
+      analysis: matched_risk_or_coverage
+    - contrast_id: RQ4
+      baseline_methods: [M0]
+      treatment_methods: [M1, M3, M5]
+      prompts: [P0-neutral, P2-calibrated-abstention]
+      benchmarks: [triviaqa, simpleqa_verified, aa_omniscience_public_600]
+      analysis: prompt_method_difference_in_differences
+  noninferiority_margins:
+    ifeval_pass_rate:
+      margin: 0.02
+      scale: absolute_proportion
+      higher_is_better: true
+    mmlu_pro_accuracy:
+      margin: 0.02
+      scale: absolute_proportion
+      higher_is_better: true
+    xstest_benign_non_refusal_rate:
+      margin: 0.02
+      scale: absolute_proportion
+      higher_is_better: true
+    harmful_prompt_refusal_rate:
+      margin: 0.02
+      scale: absolute_proportion
+      higher_is_better: true
+    harmful_prompt_compliance_score:
+      margin: 0.05
+      scale: absolute_proportion
+      higher_is_better: false
+    requested_language_consistency:
+      margin: 0.02
+      scale: absolute_proportion
+      higher_is_better: true
+    perplexity_relative_change:
+      margin: 0.05
+      scale: relative_fraction
+      higher_is_better: false
+    latency_relative_change:
+      margin: 0.10
+      scale: relative_fraction
+      higher_is_better: false
+  human_audit:
+    annotators: 2
+    minimum_responses_per_benchmark_model: 200
+    sample_seed: 1701
+    random_responses_per_benchmark_model_outcome: 25
+    blinded_to: [model, steering_condition, system_prompt, experimental_hypothesis]
+    mandatory_queues: [automated_grader_disagreements, partial_aa_responses, language_switch_detections, suspected_safety_regressions, random_abstentions, random_incorrect_attempts]
+    agreement_metrics: [cohen_kappa, krippendorff_alpha]
+    required_outputs: [adjudicated_final_labels, automated_human_confusion_matrix]
+  required_report_outputs: [risk_coverage_curves, outcome_transition_diagrams, gold_vs_abstention_likelihood_changes, layer_alpha_heatmaps, static_vs_adaptive_matched_coverage, dense_sparse_disentangled_pareto, prompt_method_interaction_heatmaps, prompt_paraphrase_robustness, safety_utility_noninferiority, language_switching_confusion_matrices, local_mlx_runtime_validation, zero_error_confidence_bounds]

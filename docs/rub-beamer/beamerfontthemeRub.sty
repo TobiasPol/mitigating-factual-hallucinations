@@ -1,0 +1,64 @@
+% Copyright 2007 by Till Tantau
+% Edited by Sebastian Jeworutzki 2012
+% This file may be distributed and/or modified
+%
+% 1. under the LaTeX Project Public License and/or
+% 2. under the GNU Public License.
+%
+% See the file doc/licenses/LICENSE for more details.
+
+\ProvidesPackage{beamerfontthemeRub}[27/09/12 19:41:02]
+
+% Schriften aus dem Corporate Design laden
+
+% % ToDo: Vielleicht global verfuegbar machen?
+% % ifxetexorluatex seen at 
+% % http://tex.stackexchange.com/a/47579
+\RequirePackage{ifxetex, ifluatex}
+
+\newif\ifxetexorluatex
+\ifxetex
+  \xetexorluatextrue
+\else
+  \ifluatex
+    \xetexorluatextrue
+  \else
+    \xetexorluatexfalse
+  \fi
+\fi
+
+\ifxetexorluatex
+  \RequirePackage{fontspec}
+  \setmainfont{RubFlama}
+  \setsansfont{RubFlama}
+  \setromanfont{RUB Scala TZ}
+\else
+  \RequirePackage{rubfonts2009}
+  \RequirePackage[T1]{fontenc}    % 
+  \RequirePackage[utf8]{inputenc} % ToDo: Möglicherweise unerwünscht.
+\fi
+
+\mode<presentation>
+
+% Schrift im Frametitle
+\setbeamerfont{section in head/foot}{size=\fontsize{6pt}{8pt}\selectfont,series=\normalfont}
+\setbeamerfont{block title}{size=\normalsize,series=\normalfont}
+\setbeamerfont{head author}{series=\normalfont,size=\fontsize{5pt}{1em}}
+\setbeamerfont{head institute}{series=\bfseries,size=\fontsize{5pt}{1em}}
+\setbeamerfont{frametitle}{size=\fontsize{14pt}{15pt}}
+
+% Title page: default
+\setbeamerfont{title}{series=\bfseries,size=\fontsize{14pt}{1.2em}}
+\setbeamerfont{subtitle}{series=\normalfont,size=\fontsize{14pt}{1.2em}}
+\setbeamerfont{date}{series=\bfseries,size=\fontsize{14pt}{1.2em}}
+\setbeamerfont{author}{series=\normalfont,size=\fontsize{8pt}{1em}}
+\setbeamerfont{institute}{series=\bfseries,size=\fontsize{8pt}{1em}}
+
+\mode<handout>
+% Bei Handout Blocküberschriften verändern 
+\setbeamerfont{block title}{series=\itshape\bfseries}
+\setbeamerfont{block title alerted}{series=\bfseries}
+\setbeamerfont{block title example}{series=\itshape}
+
+\mode
+<all>

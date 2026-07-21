@@ -1,0 +1,13 @@
+schema_version: 1
+model:
+  name: gemma4-e4b-it-qat-mobile
+  repository: google/gemma-4-E4B-it-qat-mobile-transformers
+  revision: 9a78a5adac7bca7a9e421634e4b58f41ca7cbca3
+  runtime: transformers
+  quantization: qat-mobile-mixed-int2-int4-int8-srq
+  num_layers: 42
+  dtype: float16
+  trust_remote_code: false
+  role: research-and-replication
+  candidate_layers: [10, 21, 31, 37, 41]
+  transformers_model_class: image_text_to_text

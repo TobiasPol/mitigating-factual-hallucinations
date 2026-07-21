@@ -1,0 +1,19 @@
+schema_version: 1
+grader:
+  benchmark: simpleqa_verified
+  source_repository: https://www.kaggle.com/code/nanliao7/simpleqa-verified-benchmark-starter-code?scriptVersionId=290594993
+  source_revision: 14d0c0513efefdfe7936e05c6fc09b4b4a191cc31273ca8bfbcdeaea0c6fdb1b
+  source_artifact: simpleqa-verified-benchmark-starter-code-v9.ipynb
+  source_artifact_sha256: 14d0c0513efefdfe7936e05c6fc09b4b4a191cc31273ca8bfbcdeaea0c6fdb1b
+  grader_model: openai/gpt-4.1
+  grader_model_revision: gpt-4.1-2025-04-14
+  temperature: 0.0
+  reasoning_enabled: false
+  prompt_path: simpleqa-verified.prompt.txt
+  prompt_sha256: 84c004ec4fcf8f0703bb0d734544036a72e847bfa7116429e5aee5e53ccc8cf3
+  label_mapping:
+    A: C
+    B: I
+    C: A
+  maximum_attempts: 3
+  failure_outcome: U

@@ -1,0 +1,27 @@
+schema_version: 1
+prompts:
+  - prompt_id: P0-neutral
+    text: You are a helpful assistant. Answer the user's factual question.
+    permits_abstention: true
+    deployment_eligible: true
+  - prompt_id: P1-direct
+    text: Give only the shortest answer that directly answers the question. Do not add an explanation.
+    permits_abstention: true
+    deployment_eligible: true
+  - prompt_id: P2-calibrated-abstention
+    text: Answer only when you are sufficiently confident that the answer is correct. Otherwise respond exactly with “I don't know.” Do not guess.
+    permits_abstention: true
+    deployment_eligible: true
+  - prompt_id: P3-forced-answer
+    text: Give your best short answer even when uncertain. Do not abstain.
+    permits_abstention: false
+    deployment_eligible: false
+  - prompt_id: P-AA-official
+    text: |-
+      You are answering questions about {domain}, and in particular {topic}.
+      You will be given a question, answer with JUST the answer (no explanation).
+      If you do not know the answer, or you need more context or tools to answer the question,
+      be clear about this - it is better that you say this than get the wrong answer.
+    permits_abstention: true
+    deployment_eligible: true
+

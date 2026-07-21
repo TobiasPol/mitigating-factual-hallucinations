@@ -1,0 +1,12 @@
+schema_version: 1
+llama_server:
+  source_repository: https://github.com/PrismML-Eng/llama.cpp
+  source_revision: 62061f91088281e65071cc38c5f69ee95c39f14e
+  source_path: ../../artifacts/runtimes/llama.cpp/62061f91088281e65071cc38c5f69ee95c39f14e/source
+  binary_path: ../../artifacts/runtimes/llama.cpp/62061f91088281e65071cc38c5f69ee95c39f14e/build/bin/llama-server
+  binary_sha256: a5367c78745a8ba00e53a59edf18416d7fc3c7c96e38994aec552ac2a31a4ca0
+  build_tree_sha256: e5d11b105e7d72f2fc9164a65c9e885891e979a36c726b8cdf4e6595d2dfeaab
+  build_tree_layout_sha256: 5b4e1ffbbcb8f4423766bed2059872781ce5880aa6185f484e92919d5b9d17fb
+  version_digest: 8cd55aa4dc92e48f3e0201081df47ed49e495e2e905620de505d465aba97be55
+  build_info: b1-62061f91
+  chat_template_stable_hash: 5c5c2567af60e8b6a5cb02dcdcb19775bbe046ee909fca1a04beed873078be7c

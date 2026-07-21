@@ -1,0 +1,27 @@
+.DS_Store
+.idea/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+tmp/
+
+# Research outputs are intentionally kept out of source control. Frozen
+# manifests and small aggregate reports can be copied into reports/ manually.
+artifacts/
+data/raw/
+data/interim/
+data/processed/
+/models/
+checkpoints/
+*.mmap
+*.safetensors
+*.gguf

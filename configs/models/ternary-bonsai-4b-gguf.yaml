@@ -1,0 +1,15 @@
+schema_version: 1
+model:
+  name: ternary-bonsai-4b-gguf
+  repository: prism-ml/Ternary-Bonsai-4B-gguf
+  revision: a3eb42bafe873f9686bc97486c43b72ef7d75ec8
+  runtime: llama.cpp
+  quantization: Q2_0_g128-language
+  num_layers: 36
+  dtype: ternary
+  trust_remote_code: false
+  role: deployment-replication
+  artifact: Ternary-Bonsai-4B-Q2_0.gguf
+  artifact_sha256: 4e0bf8b737b0431552f8c2c97695ab7c0cb214c94bcdeb4f5f267e67ddf28b8b
+  artifact_size_bytes: 1074969344
+  candidate_layers: [9, 18, 27, 32, 35]

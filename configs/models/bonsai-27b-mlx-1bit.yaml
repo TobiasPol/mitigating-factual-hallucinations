@@ -1,0 +1,13 @@
+schema_version: 1
+model:
+  name: bonsai-27b-mlx-1bit
+  repository: prism-ml/Bonsai-27B-mlx-1bit
+  revision: ef22f239c670078e1507f9769bcaa66657332b96
+  runtime: mlx
+  quantization: binary-g128-mlx-1bit
+  num_layers: 64
+  dtype: bfloat16
+  trust_remote_code: false
+  role: sole-activation-research-model
+  candidate_layers: [16, 31, 32, 47, 48, 57, 63]
+  transformers_model_class: causal_lm

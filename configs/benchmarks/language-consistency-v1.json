@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "suite_id": "mfh-language-consistency-v1",
+  "description": "Five-language factual arithmetic prompts with language-specific full-sentence answers.",
+  "items_per_language": 100,
+  "operand_rule": {
+    "left": "17 + index",
+    "right": "3 + ((index * 7) % 19)"
+  },
+  "languages": {
+    "de": {
+      "name": "German",
+      "prompt": "Berechne {left} plus {right}. Antworte mit einem vollstaendigen deutschen Satz.",
+      "answer": "Die Antwort ist {result}."
+    },
+    "en": {
+      "name": "English",
+      "prompt": "Calculate {left} plus {right}. Answer with a complete English sentence.",
+      "answer": "The answer is {result}."
+    },
+    "es": {
+      "name": "Spanish",
+      "prompt": "Calcula {left} mas {right}. Responde con una oracion completa en espanol.",
+      "answer": "La respuesta es {result}."
+    },
+    "fr": {
+      "name": "French",
+      "prompt": "Calcule {left} plus {right}. Reponds avec une phrase complete en francais.",
+      "answer": "La reponse est {result}."
+    },
+    "ja": {
+      "name": "Japanese",
+      "prompt": "{left}と{right}を足してください。日本語の完全な文で答えてください。",
+      "answer": "答えは{result}です。"
+    }
+  }
+}

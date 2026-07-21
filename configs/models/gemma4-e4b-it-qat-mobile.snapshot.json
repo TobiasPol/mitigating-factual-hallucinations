@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "repository": "google/gemma-4-E4B-it-qat-mobile-transformers",
+  "revision": "9a78a5adac7bca7a9e421634e4b58f41ca7cbca3",
+  "file_count": 10,
+  "total_size_bytes": 3557322773,
+  "files": [
+    {"path": ".gitattributes", "size_bytes": 1570, "digest_algorithm": "git-blob-sha1", "digest": "52373fe24473b1aa44333d318f578ae6bf04b49b"},
+    {"path": "README.md", "size_bytes": 28916, "digest_algorithm": "git-blob-sha1", "digest": "27d083770f15464ea341796919663d1921f5ec68"},
+    {"path": "chat_template.jinja", "size_bytes": 17336, "digest_algorithm": "git-blob-sha1", "digest": "c19999a347da729cf62806a8ddb7eb8e315223b5"},
+    {"path": "config.json", "size_bytes": 6305, "digest_algorithm": "git-blob-sha1", "digest": "a50eff925e6d8ddf716fa2833707cd684bfadea0"},
+    {"path": "generation_config.json", "size_bytes": 209, "digest_algorithm": "git-blob-sha1", "digest": "76d3a00538aca6a1b85db3328e1b0f4e93316420"},
+    {"path": "model.safetensors", "size_bytes": 3525094516, "digest_algorithm": "sha256", "digest": "391946da2e0bec22288e9fe50a4d31d2401c9570ba3baaf0ba43d644dadeb1d4"},
+    {"path": "preprocessor_config.json", "size_bytes": 511, "digest_algorithm": "git-blob-sha1", "digest": "4adff307a29874c969eda7edb5d3f07faaef879d"},
+    {"path": "processor_config.json", "size_bytes": 1689, "digest_algorithm": "git-blob-sha1", "digest": "5465974d23e1eca2c46c2809b26c997946ce0d90"},
+    {"path": "tokenizer.json", "size_bytes": 32169626, "digest_algorithm": "sha256", "digest": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f"},
+    {"path": "tokenizer_config.json", "size_bytes": 2095, "digest_algorithm": "git-blob-sha1", "digest": "259b62161f0bbf1e82e4135f13821d49766f0b8d"}
+  ]
+}
