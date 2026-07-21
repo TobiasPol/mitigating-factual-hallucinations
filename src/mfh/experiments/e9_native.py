@@ -53,7 +53,7 @@ from mfh.experiments.runner import (
 )
 from mfh.experiments.runtime_evidence import build_generation_runtime_metrics
 from mfh.inference.mlx_research import MlxResearchInterventionState
-from mfh.inference.mlx_runtime import MlxGenerationOutput
+from mfh.inference.mlx_runtime import MlxGenerationOutput, as_numpy
 from mfh.provenance import sha256_file, stable_hash
 
 
@@ -96,7 +96,7 @@ def _strict_runtime_arrays(
     ):
         raise FrozenArtifactError("confirmatory MLX hook did not execute its exact edit")
     delta = np.ascontiguousarray(intervened - captured)
-    direction = np.ascontiguousarray(np.asarray(state.direction, dtype=np.float32))
+    direction = np.ascontiguousarray(as_numpy(state.direction, dtype=np.float32))
     alphas = [
         state.alpha * math.exp(-state.decay * index)
         if state.token_scope is TokenScope.EXPONENTIAL_DECAY

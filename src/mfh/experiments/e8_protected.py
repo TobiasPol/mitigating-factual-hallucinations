@@ -40,6 +40,7 @@ from mfh.experiments.runtime_evidence import (
     build_generation_runtime_metrics,
     validate_generation_runtime_metrics,
 )
+from mfh.inference.mlx_runtime import as_numpy
 from mfh.methods.features import (
     ActivationFeatureSchema,
     ActivationKind,
@@ -2354,8 +2355,8 @@ def execute_e8_adaptive_generation(
         assert selected_layer is not None
         assert selected_site is not None
         assert selected_scope is not None
-        captured = np.asarray(state.captured, dtype=np.float32)
-        intervened = np.asarray(state.intervened, dtype=np.float32)
+        captured = as_numpy(state.captured, dtype=np.float32)
+        intervened = as_numpy(state.intervened, dtype=np.float32)
         if (
             captured.shape != intervened.shape
             or captured.size == 0
@@ -2689,8 +2690,8 @@ def execute_e8_generation(
         site = condition.site
         token_scope = condition.token_scope
         standardized_alpha = condition.alpha
-        captured = np.asarray(state.captured, dtype=np.float32)
-        intervened = np.asarray(state.intervened, dtype=np.float32)
+        captured = as_numpy(state.captured, dtype=np.float32)
+        intervened = as_numpy(state.intervened, dtype=np.float32)
         if (
             captured.shape != intervened.shape
             or captured.size == 0

@@ -47,6 +47,7 @@ from mfh.experiments.runner import (
     validate_side_effect_evaluation_bundle,
 )
 from mfh.experiments.runtime_evidence import build_generation_runtime_metrics
+from mfh.inference.mlx_runtime import as_numpy
 from mfh.methods.controls import (
     label_shuffled_centroid_direction,
     matched_random_direction,
@@ -559,8 +560,8 @@ def execute_coordinate_screen_generation(
         assert normalized_direction is not None
         assert layer is not None and site is not None and token_scope is not None
         assert reference_rms is not None and retained_fraction is not None
-        captured = np.asarray(state.captured, dtype=np.float32)
-        edited = np.asarray(state.intervened, dtype=np.float32)
+        captured = as_numpy(state.captured, dtype=np.float32)
+        edited = as_numpy(state.intervened, dtype=np.float32)
         expected_indices = (
             [-1]
             if token_scope is TokenScope.FINAL_PROMPT

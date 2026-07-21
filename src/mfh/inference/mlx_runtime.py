@@ -38,9 +38,37 @@ _SHORT_ANSWER_ABBREVIATIONS = (
 )
 
 
+def as_numpy(
+    value: Any,
+    *,
+    dtype: Any | None = None,
+    copy: bool = True,
+) -> np.ndarray[Any, Any]:
+    """Materialize an MLX-compatible value as a NumPy array.
+
+    MLX documents ``np.array`` as its NumPy interoperability boundary. Routing
+    live tensors through ``np.asarray`` is not reliable across NumPy/MLX
+    releases. MLX ``bfloat16`` also has no NumPy representation, so materialize
+    it as ``float32`` before crossing that boundary and apply any requested
+    NumPy dtype afterwards.
+    """
+
+    source = value
+    value_type = type(value)
+    if value_type.__module__.partition(".")[0] == "mlx":
+        try:
+            import mlx.core as mx
+        except ImportError as exc:  # pragma: no cover - guarded by an MLX value
+            raise OptionalDependencyError("cannot convert an MLX array without MLX") from exc
+        if getattr(value, "dtype", None) == mx.bfloat16:
+            source = value.astype(mx.float32)
+    array = np.array(source, copy=copy)
+    return array.astype(dtype, copy=False) if dtype is not None else array
+
+
 def _mlx_modules() -> tuple[Any, Any, Any, Any]:
     try:
-        import mlx.core as mx  # type: ignore[import-not-found]
+        import mlx.core as mx
         import mlx.nn as nn
         from mlx_lm import load
         from mlx_lm.generate import stream_generate
@@ -160,7 +188,7 @@ def _capture_and_intervene(output: Any, state: MlxInterventionState, mx: Any) ->
     ):
         mx.eval(output)
         capture_history.append(
-            np.asarray(output[0, -1, :], dtype=np.float32).copy()
+            as_numpy(output[0, -1, :], dtype=np.float32)
         )
     if effective_alpha == 0.0:
         state.intervened = output
@@ -180,10 +208,10 @@ def _capture_and_intervene(output: Any, state: MlxInterventionState, mx: Any) ->
     if isinstance(applied_pre_history, list) and isinstance(applied_post_history, list):
         mx.eval(output, result)
         applied_pre_history.append(
-            np.asarray(output[0, -1, :], dtype=np.float32).copy()
+            as_numpy(output[0, -1, :], dtype=np.float32)
         )
         applied_post_history.append(
-            np.asarray(result[0, -1, :], dtype=np.float32).copy()
+            as_numpy(result[0, -1, :], dtype=np.float32)
         )
     state.intervened = result
     state.applications += 1
@@ -375,7 +403,7 @@ class MlxRuntime:
             mx.eval(logits)
         if state.captured is None:
             raise DataValidationError("MLX hook did not capture an activation")
-        return np.asarray(state.captured[:, -1, :]).astype(np.float32, copy=True)
+        return as_numpy(state.captured[:, -1, :], dtype=np.float32)
 
     @contextmanager
     def intervention(

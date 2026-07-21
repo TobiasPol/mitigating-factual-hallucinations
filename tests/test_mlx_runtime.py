@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from mfh.config import load_model_spec, load_prompt_specs
-from mfh.inference.mlx_runtime import MlxRuntime, _completed_short_answer
+from mfh.inference.mlx_runtime import MlxRuntime, _completed_short_answer, as_numpy
 
 ROOT = Path(__file__).parents[1]
 
@@ -47,3 +49,13 @@ def test_short_answer_stop_uses_first_sentence_or_line() -> None:
     assert _completed_short_answer("Paris\nAdditional explanation") is True
     assert _completed_short_answer("The answer is Dr.") is False
     assert _completed_short_answer("Paris") is False
+
+
+def test_as_numpy_applies_dtype_and_owns_the_materialized_copy() -> None:
+    source = np.asarray([1.0, 2.0], dtype=np.float64)
+
+    converted = as_numpy(source, dtype=np.float32)
+
+    assert converted.dtype == np.float32
+    assert converted.tolist() == [1.0, 2.0]
+    assert not np.shares_memory(source, converted)

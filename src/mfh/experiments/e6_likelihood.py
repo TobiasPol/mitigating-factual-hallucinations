@@ -64,6 +64,7 @@ from mfh.inference.mlx_runtime import (
     MlxGenerationOutput,
     MlxInterventionState,
     MlxRenderedPrompt,
+    as_numpy,
 )
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
 
@@ -388,7 +389,7 @@ class E6ScoredResponse:
 
 def _direction_identity(direction: Any) -> tuple[str, float]:
     try:
-        values = np.asarray(direction, dtype=np.float32)
+        values = as_numpy(direction, dtype=np.float32)
     except (TypeError, ValueError) as exc:
         raise DataValidationError(f"E6 intervention direction is invalid: {exc}") from exc
     norm = float(np.linalg.norm(values)) if values.ndim == 1 else math.nan
@@ -1420,7 +1421,7 @@ def execute_and_bind_e6_likelihood(
         assert condition.site is not None
         assert condition.token_scope is not None
         state = states[condition.layer]
-        direction = np.asarray(state.direction, dtype=np.float32)
+        direction = as_numpy(state.direction, dtype=np.float32)
         if (
             type(state) is not MlxResearchInterventionState
             or direction.ndim != 1
@@ -1487,8 +1488,8 @@ def execute_and_bind_e6_likelihood(
             or generation_record.output_tokens != generated.output_tokens
         ):
             raise DataValidationError("E6 M1 generated output differs from the ledger row")
-        captured = np.asarray(state.captured, dtype=np.float32)
-        intervened = np.asarray(state.intervened, dtype=np.float32)
+        captured = as_numpy(state.captured, dtype=np.float32)
+        intervened = as_numpy(state.intervened, dtype=np.float32)
         if (
             captured.shape != intervened.shape
             or captured.size == 0

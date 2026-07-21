@@ -71,7 +71,7 @@ from mfh.inference.mlx_research import (
     MlxPromptFeatureCubeOutput,
     MlxResearchInterventionState,
 )
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt, as_numpy
 from mfh.provenance import sha256_path, stable_hash
 
 _PROMPTS = ("P0-neutral", "P2-calibrated-abstention")
@@ -615,7 +615,7 @@ def _strict_runtime_arrays(
     ):
         raise FrozenArtifactError("E4 MLX hook did not execute its exact edit")
     delta = np.ascontiguousarray(intervened - captured)
-    direction = np.ascontiguousarray(np.asarray(state.direction, dtype=np.float32))
+    direction = np.ascontiguousarray(as_numpy(state.direction, dtype=np.float32))
     expected = np.stack(
         [direction * state.alpha for _ in range(expected_applications)]
     ).astype(np.float32, copy=False)

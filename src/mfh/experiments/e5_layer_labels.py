@@ -38,7 +38,7 @@ from mfh.experiments.static_direction_sources import (
     ResolvedStaticDirection,
     resolve_static_direction,
 )
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt, as_numpy
 from mfh.methods.features import FeatureComposition
 from mfh.methods.probes import ProbeDataset
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
@@ -925,8 +925,8 @@ def _execution_record(
     if type(generated) is not MlxGenerationOutput or generated.rendered_prompt != rendered:
         raise FrozenArtifactError("E5 layer-label runtime returned invalid generation")
     try:
-        pre = np.ascontiguousarray(np.asarray(state.captured, dtype=np.float32))
-        post = np.ascontiguousarray(np.asarray(state.intervened, dtype=np.float32))
+        pre = np.ascontiguousarray(as_numpy(state.captured, dtype=np.float32))
+        post = np.ascontiguousarray(as_numpy(state.intervened, dtype=np.float32))
     except (TypeError, ValueError) as exc:
         raise DataValidationError(f"E5 layer-label hook evidence is invalid: {exc}") from exc
     delta = np.ascontiguousarray(post - pre, dtype=np.float32)
