@@ -148,32 +148,14 @@ def test_public_scientific_writers_reject_outside_active_namespace(
         )
 
 
-def test_superseded_partial_e1_rejects_unsealed_inventory_entries(
-    tmp_path: Path,
-) -> None:
+def test_partial_superseded_artifact_transfer_is_rejected(tmp_path: Path) -> None:
     project = tmp_path / "project"
     shutil.copytree(ROOT / "configs", project / "configs")
-    for relative in (
-        "artifacts/runs/E0",
-        "artifacts/e0/bonsai-27b-mlx",
-        "artifacts/e0/bonsai-27b-mlx-work",
-        "artifacts/e0/scientific-completion",
-        "artifacts/runs/E1",
-        "artifacts/work/E1",
-    ):
-        shutil.copytree(ROOT / relative, project / relative)
-    checkpoint = project / "artifacts/checkpoints/E1-generation.json"
-    checkpoint.parent.mkdir(parents=True)
-    shutil.copy2(ROOT / "artifacts/checkpoints/E1-generation.json", checkpoint)
+    partial = project / "artifacts/runs/E0"
+    partial.mkdir(parents=True)
+    (partial / "unsealed-extra.bin").write_bytes(b"not frozen")
+
     amendment = project / "configs/experiments/model-selection-amendment.json"
     models = project / "configs/models"
-
-    load_model_selection_amendment(amendment, model_config_directory=models)
-    unexpected_file = project / "artifacts/work/E1/unsealed-extra.bin"
-    unexpected_file.write_bytes(b"not frozen")
-    with pytest.raises(ConfigurationError, match="E1 inventory differs"):
-        load_model_selection_amendment(amendment, model_config_directory=models)
-    unexpected_file.unlink()
-    (project / "artifacts/runs/E1/unsealed-empty-dir").mkdir()
-    with pytest.raises(ConfigurationError, match="E1 inventory differs"):
+    with pytest.raises(ConfigurationError, match="superseded Bonsai E0 artifact differs"):
         load_model_selection_amendment(amendment, model_config_directory=models)

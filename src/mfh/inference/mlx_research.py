@@ -26,6 +26,7 @@ from mfh.inference.mlx_runtime import (
     MlxRuntime,
     _completed_short_answer,
     _mlx_modules,
+    as_numpy,
 )
 from mfh.provenance import sha256_path
 
@@ -182,7 +183,7 @@ def _validate_fresh_intervention_state(
             raise ConfigurationError("active MLX intervention requires a direction")
         return
     try:
-        direction = np.asarray(state.direction, dtype=np.float32)
+        direction = as_numpy(state.direction, dtype=np.float32)
     except (TypeError, ValueError) as exc:
         raise ConfigurationError(f"MLX intervention direction is invalid: {exc}") from exc
     norm = float(np.linalg.norm(direction)) if direction.ndim == 1 else math.nan
@@ -236,7 +237,7 @@ class MlxPromptFeatureOutput:
                     "MLX prompt activation layer identifiers must be exact integers"
                 )
             layer = raw_layer
-            activation = np.asarray(raw_activation, dtype=np.float32).copy()
+            activation = as_numpy(raw_activation, dtype=np.float32, copy=True)
             if (
                 layer < 0
                 or activation.ndim != 2
@@ -385,7 +386,7 @@ class MlxTeacherForcedOutput:
                 raise DataValidationError(
                     "MLX teacher-forced activation layers must be exact integers"
                 )
-            activation = np.asarray(raw_activation, dtype=np.float32).copy()
+            activation = as_numpy(raw_activation, dtype=np.float32, copy=True)
             if (
                 activation.ndim != 2
                 or activation.shape[0] != len(self.response_token_ids)
@@ -773,7 +774,7 @@ class MlxResearchRuntime:
     ) -> MlxResearchInterventionState:
         """Translate preregistered RMS-relative strength into one fresh MLX state."""
 
-        values = np.asarray(direction, dtype=np.float32)
+        values = as_numpy(direction, dtype=np.float32)
         norm = float(np.linalg.norm(values)) if values.ndim == 1 else math.nan
         if (
             values.ndim != 1
@@ -875,7 +876,7 @@ class MlxResearchRuntime:
                 captured[key] = state.captured
             mx.eval(logits, *captured.values())
 
-        final_logits = np.asarray(logits[0, -1, :], dtype=np.float64)
+        final_logits = as_numpy(logits[0, -1, :], dtype=np.float64)
         if final_logits.ndim != 1 or final_logits.size < 2 or not np.isfinite(final_logits).all():
             raise DataValidationError("MLX prompt logits are invalid")
         shifted = final_logits - float(final_logits.max())
@@ -888,7 +889,7 @@ class MlxResearchRuntime:
         entropy = -float(np.sum(probabilities[positive] * np.log(probabilities[positive])))
         activations = {
             site: {
-                layer: np.asarray(captured[(site, layer)][:, -1, :], dtype=np.float32)
+                layer: as_numpy(captured[(site, layer)][:, -1, :], dtype=np.float32)
                 for layer in selected_layers
             }
             for site in selected_sites
@@ -1017,7 +1018,7 @@ class MlxResearchRuntime:
                     "MLX teacher-forced cube hook missed the prompt activation"
                 )
             for token_id in response_token_ids:
-                final_logits = np.asarray(logits[0, -1, :], dtype=np.float64)
+                final_logits = as_numpy(logits[0, -1, :], dtype=np.float64)
                 if (
                     final_logits.ndim != 1
                     or token_id >= final_logits.size
@@ -1041,7 +1042,7 @@ class MlxResearchRuntime:
                 mx.eval(logits, *captured.values())
                 for key, activation in captured.items():
                     trajectories[key].append(
-                        np.asarray(activation[0, -1, :], dtype=np.float32).copy()
+                        as_numpy(activation[0, -1, :], dtype=np.float32, copy=True)
                     )
         nll = -sum(log_probabilities)
         mean_nll = nll / len(log_probabilities)
@@ -1134,7 +1135,7 @@ class MlxResearchRuntime:
             if any(state.captured is None for state in states.values()):
                 raise DataValidationError("MLX continuation hook missed the prompt activation")
             for token_id in response_token_ids:
-                final_logits = np.asarray(logits[0, -1, :], dtype=np.float64)
+                final_logits = as_numpy(logits[0, -1, :], dtype=np.float64)
                 if (
                     final_logits.ndim != 1
                     or token_id >= final_logits.size
@@ -1159,7 +1160,7 @@ class MlxResearchRuntime:
                 mx.eval(logits, *captured)
                 for layer, activation in zip(selected_layers, captured, strict=True):
                     trajectories[layer].append(
-                        np.asarray(activation[0, -1, :], dtype=np.float32).copy()
+                        as_numpy(activation[0, -1, :], dtype=np.float32, copy=True)
                     )
         nll = -sum(log_probabilities)
         mean_nll = nll / len(log_probabilities)

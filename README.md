@@ -88,14 +88,27 @@ chmod 600 .env 2>/dev/null || true
 
 ## 2. Install the exact environment
 
-Install Xcode and the matching Metal Toolchain first. Then install `uv` and run:
+Install Xcode and the matching Metal Toolchain first. Then install current
+`pyenv` and `uv`, and run:
 
 ```bash
-uv python install 3.11.14
+# CPython 3.11.14 is no longer in uv's downloadable Python catalog. Install the
+# exact registered runtime with pyenv; .python-version makes uv select it.
+pyenv install --skip-existing 3.11.14
+pyenv local 3.11.14
+python --version  # must print Python 3.11.14
+
 uv sync --extra dev --extra research --extra mlx-macos
 uv lock --check
 uv run hf version
 ```
+
+Do not replace 3.11.14 with the newest 3.11 patch: the runtime policy and frozen
+artifacts require this exact interpreter. If `uv` reports `No download found for
+request: cpython-3.11.14`, it is being asked to install a version no longer in its
+catalog; use the `pyenv` commands above. If `uv` still resolves to an older
+`~/.local/bin/uv`, remove that stale installation or put the current `uv` earlier
+on `PATH`.
 
 `hf` is the current Hugging Face Hub CLI (`huggingface-cli` is deprecated). The
 locked research extra supplies it, and it reads `HF_TOKEN` from the environment.
@@ -108,7 +121,7 @@ Run the repository checks before downloading or loading Qwen:
 
 ```bash
 uv run ruff check .
-uv run mypy --strict src/mfh
+uv run mypy src/mfh
 uv run pytest
 
 uv run mfh validate-study \

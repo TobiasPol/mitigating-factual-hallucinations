@@ -14,6 +14,8 @@ from mfh.experiments.grader_bundle import (
 )
 from mfh.provenance import sha256_file, stable_hash
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_e1_grader_bundle_freezes_and_replays_every_live_input(tmp_path: Path) -> None:
     output = tmp_path / "graders"
@@ -35,8 +37,22 @@ def test_e1_grader_bundle_freezes_and_replays_every_live_input(tmp_path: Path) -
     for role in grader_bundle_sources():
         packaged = output / manifest["files"][role]["path"]
         assert sha256_file(packaged) == manifest["files"][role]["sha256"]
+    repository = tmp_path / "repository"
+    (repository / "docs").mkdir(parents=True)
+    (repository / "docs/research-plan.md").touch()
+    (repository / "src/mfh").mkdir(parents=True)
+    for role, source in grader_bundle_sources().items():
+        relative = source.relative_to(ROOT)
+        destination = repository / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(output / manifest["files"][role]["path"], destination)
+    (repository / manifest["files"]["aa_source"]["source_path"]).write_bytes(b"changed")
     with pytest.raises(FrozenArtifactError, match="live E1 grader input"):
-        verify_e1_grader_bundle(output, verify_live_sources=True)
+        verify_e1_grader_bundle(
+            output,
+            repository_root=repository,
+            verify_live_sources=True,
+        )
 
 
 def test_e1_grader_bundle_rejects_tampering_and_wrong_expected_digest(tmp_path: Path) -> None:

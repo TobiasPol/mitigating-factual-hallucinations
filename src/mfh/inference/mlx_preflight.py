@@ -14,13 +14,11 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from mfh.config import load_model_spec
 from mfh.contracts import ActivationSite
 from mfh.errors import ConfigurationError, DataValidationError, FrozenArtifactError
 from mfh.inference.mlx_research import mlx_research_toolchain_identity
-from mfh.inference.mlx_runtime import MlxInterventionState, MlxRuntime, _mlx_modules
+from mfh.inference.mlx_runtime import MlxInterventionState, MlxRuntime, _mlx_modules, as_numpy
 from mfh.inference.transformers_snapshot import verify_transformers_snapshot
 from mfh.provenance import sha256_file, stable_hash
 
@@ -159,7 +157,7 @@ def load_mlx_runtime_policy(path: str | Path) -> Mapping[str, Any]:
 
 
 def _array_sha256(value: Any) -> str:
-    array = np.ascontiguousarray(np.asarray(value))
+    array = as_numpy(value)
     return hashlib.sha256(array.tobytes()).hexdigest()
 
 
