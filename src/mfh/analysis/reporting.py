@@ -55,7 +55,7 @@ _FINAL_ANALYSIS_PHASES = (
     ExperimentPhase.E10,
 )
 _MODEL_NAMES_BY_REPOSITORY = {
-    "mlx-community/Qwen3.6-27B-4bit": "qwen3.6-27b-mlx-4bit",
+    "nvidia/Qwen3.6-27B-NVFP4": "qwen3.6-27b-nvfp4",
 }
 _NONINFERIORITY_METRICS = {
     "ifeval_pass_rate",
@@ -111,7 +111,7 @@ _REPORT_RESULT_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
         "composite_side_effects",
     ),
     "language_switching_confusion_matrices": ("language_confusion",),
-    "local_mlx_runtime_validation": ("runtime_replication",),
+    "local_vllm_runtime_validation": ("runtime_replication",),
     "zero_error_confidence_bounds": ("zero_error_bounds",),
     "adjudicated_final_labels": ("human_audit",),
     "automated_human_confusion_matrix": ("human_audit",),
@@ -1173,7 +1173,7 @@ class FinalAnalysisResults:
         )
         if consistent > judged or not math.isclose(score, consistent / judged, abs_tol=1e-12):
             raise DataValidationError("adjudicated human language score is invalid")
-        runtime = self.runtime_replication.get("local_mlx_execution")
+        runtime = self.runtime_replication.get("local_vllm_execution")
         if not isinstance(runtime, Mapping) or not {
             "passed",
             "record_count",
@@ -1191,29 +1191,32 @@ class FinalAnalysisResults:
             "runtime_session_identity_sha256",
             "intervention_site_evidence_sha256",
             "runtime_counts",
-            "mlx_versions",
-            "mlx_lm_versions",
-            "machine_models",
-            "chips",
+            "vllm_versions",
+            "torch_versions",
+            "transformers_versions",
+            "nvidia_drivers",
+            "gpu_models",
             "operating_systems",
-            "os_builds",
             "architectures",
-            "unified_memory_bytes",
+            "cuda_capabilities",
+            "cuda_runtimes",
+            "quantization_executions",
+            "gpu_total_memory_bytes",
             "intervention_site_counts",
             "policy_action_counts",
             "mean_activation_delta_norm_by_site",
         } <= set(runtime):
             raise DataValidationError("runtime replication evidence is incomplete")
         if runtime["passed"] is not True:
-            raise DataValidationError("final analysis requires a passed native MLX replay")
+            raise DataValidationError("final analysis requires a passed native VLLM replay")
         runtime_count = _integer(
             runtime["record_count"],
-            "runtime_replication.local_mlx_execution.record_count",
+            "runtime_replication.local_vllm_execution.record_count",
             minimum=1,
         )
         signed_count = _integer(
             runtime["signed_execution_receipts"],
-            "runtime_replication.local_mlx_execution.signed_execution_receipts",
+            "runtime_replication.local_vllm_execution.signed_execution_receipts",
         )
         if signed_count != runtime_count:
             raise DataValidationError("not every final record has a signed execution receipt")
@@ -1222,30 +1225,30 @@ class FinalAnalysisResults:
             "p95_latency_seconds",
             "maximum_latency_seconds",
         ):
-            if _number(runtime[name], f"runtime_replication.local_mlx_execution.{name}") <= 0:
+            if _number(runtime[name], f"runtime_replication.local_vllm_execution.{name}") <= 0:
                 raise DataValidationError("runtime latency summaries must be positive")
         generated_count = _integer(
             runtime["candidate_generated_record_count"],
-            "runtime_replication.local_mlx_execution.candidate_generated_record_count",
+            "runtime_replication.local_vllm_execution.candidate_generated_record_count",
         )
         pre_generation_abstentions = _integer(
             runtime["pre_generation_abstention_count"],
-            "runtime_replication.local_mlx_execution.pre_generation_abstention_count",
+            "runtime_replication.local_vllm_execution.pre_generation_abstention_count",
         )
         if generated_count + pre_generation_abstentions != runtime_count:
             raise DataValidationError("runtime candidate counts differ from record count")
         generated_metrics = (
             _number(
                 runtime["mean_candidate_generation_seconds"],
-                "runtime_replication.local_mlx_execution.mean_candidate_generation_seconds",
+                "runtime_replication.local_vllm_execution.mean_candidate_generation_seconds",
             ),
             _number(
                 runtime["mean_prompt_tokens_per_second"],
-                "runtime_replication.local_mlx_execution.mean_prompt_tokens_per_second",
+                "runtime_replication.local_vllm_execution.mean_prompt_tokens_per_second",
             ),
             _number(
                 runtime["mean_generation_tokens_per_second"],
-                "runtime_replication.local_mlx_execution.mean_generation_tokens_per_second",
+                "runtime_replication.local_vllm_execution.mean_generation_tokens_per_second",
             ),
         )
         if any(value < 0 for value in generated_metrics) or (
@@ -1255,7 +1258,7 @@ class FinalAnalysisResults:
             raise DataValidationError("runtime generated-row metrics differ from candidate count")
         _integer(
             runtime["maximum_peak_memory_bytes"],
-            "runtime_replication.local_mlx_execution.maximum_peak_memory_bytes",
+            "runtime_replication.local_vllm_execution.maximum_peak_memory_bytes",
             minimum=1,
         )
         if not _SHA256.fullmatch(str(runtime["runtime_identity_sha256"])):
@@ -1265,28 +1268,31 @@ class FinalAnalysisResults:
         if not _SHA256.fullmatch(str(runtime["intervention_site_evidence_sha256"])):
             raise DataValidationError("runtime replication lacks intervention-site evidence")
         _integer(
-            runtime["unified_memory_bytes"],
-            "runtime_replication.local_mlx_execution.unified_memory_bytes",
+            runtime["gpu_total_memory_bytes"],
+            "runtime_replication.local_vllm_execution.gpu_total_memory_bytes",
             minimum=1,
         )
         runtime_counts = runtime["runtime_counts"]
         if (
             not isinstance(runtime_counts, Mapping)
             or sum(
-                _integer(value, f"runtime_replication.local_mlx_execution.runtime_counts.{key}")
+                _integer(value, f"runtime_replication.local_vllm_execution.runtime_counts.{key}")
                 for key, value in runtime_counts.items()
             )
             != runtime_count
         ):
             raise DataValidationError("runtime counts differ from the final record count")
         for name in (
-            "mlx_versions",
-            "mlx_lm_versions",
-            "machine_models",
-            "chips",
+            "vllm_versions",
+            "torch_versions",
+            "transformers_versions",
+            "nvidia_drivers",
+            "gpu_models",
             "operating_systems",
-            "os_builds",
             "architectures",
+            "cuda_capabilities",
+            "cuda_runtimes",
+            "quantization_executions",
         ):
             values = runtime[name]
             if (
@@ -1295,7 +1301,7 @@ class FinalAnalysisResults:
                 or sum(
                     _integer(
                         count,
-                        f"runtime_replication.local_mlx_execution.{name}.{key}",
+                        f"runtime_replication.local_vllm_execution.{name}.{key}",
                         minimum=1,
                     )
                     for key, count in values.items()
@@ -1311,7 +1317,7 @@ class FinalAnalysisResults:
                 or sum(
                     _integer(
                         count,
-                        f"runtime_replication.local_mlx_execution.{name}.{key}",
+                        f"runtime_replication.local_vllm_execution.{name}.{key}",
                     )
                     for key, count in values.items()
                 )
@@ -1325,7 +1331,7 @@ class FinalAnalysisResults:
             or any(
                 _number(
                     value,
-                    f"runtime_replication.local_mlx_execution.mean_activation_delta_norm_by_site.{key}",
+                    f"runtime_replication.local_vllm_execution.mean_activation_delta_norm_by_site.{key}",
                 )
                 < 0
                 for key, value in deltas.items()
@@ -2161,7 +2167,7 @@ def _validate_adjudicated_csv(
     combination_counts: dict[tuple[str, str], int] = {}
     confusion: dict[str, int] = {}
     disagreements = 0
-    models = {"qwen3.6-27b-mlx-4bit"}
+    models = {"qwen3.6-27b-nvfp4"}
     for row in rows:
         identifier = row["audit_id"].strip()
         if not identifier or identifier in identifiers:
@@ -2555,7 +2561,7 @@ _CHART_KINDS = {
     "prompt_paraphrase_robustness": "prompt-paraphrase-range",
     "safety_utility_noninferiority": "noninferiority-forest",
     "language_switching_confusion_matrices": "language-confusion-matrix",
-    "local_mlx_runtime_validation": "runtime-validation-bars",
+    "local_vllm_runtime_validation": "runtime-validation-bars",
 }
 
 
@@ -2726,10 +2732,10 @@ def _expected_semantic_marks(name: str, results: FinalAnalysisResults) -> Counte
                 "language-confusion-cell",
                 {f"result_dependencies.language_confusion.requested_detected_matrix.{cell}": count},
             )
-    elif name == "local_mlx_runtime_validation":
-        runtime = sections["runtime_replication"]["local_mlx_execution"]
+    elif name == "local_vllm_runtime_validation":
+        runtime = sections["runtime_replication"]["local_vllm_execution"]
         assert isinstance(runtime, Mapping)
-        prefix = "result_dependencies.runtime_replication.local_mlx_execution"
+        prefix = "result_dependencies.runtime_replication.local_vllm_execution"
         for metric in (
             "mean_latency_seconds",
             "p95_latency_seconds",
@@ -2753,7 +2759,7 @@ def _expected_semantic_marks(name: str, results: FinalAnalysisResults) -> Counte
             "runtime-memory-bar",
             {
                 f"{prefix}.maximum_peak_memory_bytes": runtime["maximum_peak_memory_bytes"],
-                f"{prefix}.unified_memory_bytes": runtime["unified_memory_bytes"],
+                f"{prefix}.gpu_total_memory_bytes": runtime["gpu_total_memory_bytes"],
             },
         )
         add(
@@ -3580,10 +3586,10 @@ def _render_language_chart(root: ET.Element, section: Mapping[str, Any]) -> None
 
 
 def _render_runtime_chart(root: ET.Element, section: Mapping[str, Any]) -> None:
-    runtime = section["local_mlx_execution"]
+    runtime = section["local_vllm_execution"]
     if not isinstance(runtime, Mapping):
-        raise DataValidationError("runtime chart requires local MLX evidence")
-    prefix = "result_dependencies.runtime_replication.local_mlx_execution"
+        raise DataValidationError("runtime chart requires local VLLM evidence")
+    prefix = "result_dependencies.runtime_replication.local_vllm_execution"
     latency_metrics = (
         ("mean latency", "mean_latency_seconds"),
         ("p95 latency", "p95_latency_seconds"),
@@ -3666,27 +3672,27 @@ def _render_runtime_chart(root: ET.Element, section: Mapping[str, Any]) -> None:
         _svg_text(root, 515, y + 17, f"{value:.5g}", size=9)
 
     peak = _number(runtime["maximum_peak_memory_bytes"], "runtime peak memory")
-    unified = _number(runtime["unified_memory_bytes"], "runtime unified memory")
-    _svg_text(root, 45, 360, "Peak unified-memory use", size=13)
+    available = _number(runtime["gpu_total_memory_bytes"], "runtime GPU memory")
+    _svg_text(root, 45, 360, "Peak GPU-memory use", size=13)
     _svg_element(
         root,
         "rect",
         {
             "x": "175",
             "y": "375",
-            "width": f"{max(2.0, 330 * min(1.0, peak / unified)):.3f}",
+            "width": f"{max(2.0, 330 * min(1.0, peak / available)):.3f}",
             "height": "25",
             "fill": "#d35400",
             **_semantic_attributes(
                 "runtime-memory-bar",
                 {
                     f"{prefix}.maximum_peak_memory_bytes": runtime["maximum_peak_memory_bytes"],
-                    f"{prefix}.unified_memory_bytes": runtime["unified_memory_bytes"],
+                    f"{prefix}.gpu_total_memory_bytes": runtime["gpu_total_memory_bytes"],
                 },
             ),
         },
     )
-    _svg_text(root, 515, 393, f"{peak / 2**30:.3g} / {unified / 2**30:.3g} GiB", size=9)
+    _svg_text(root, 515, 393, f"{peak / 2**30:.3g} / {available / 2**30:.3g} GiB", size=9)
 
     identity = str(runtime["runtime_identity_sha256"])
     identity_label = _svg_text(
@@ -3763,7 +3769,7 @@ def _render_semantic_chart(
         _render_noninferiority_chart(root, sections["noninferiority"], composite)
     elif name == "language_switching_confusion_matrices":
         _render_language_chart(root, sections["language_confusion"])
-    elif name == "local_mlx_runtime_validation":
+    elif name == "local_vllm_runtime_validation":
         _render_runtime_chart(root, sections["runtime_replication"])
     else:  # pragma: no cover - dependency registry and caller check agree
         raise DataValidationError(f"no semantic chart renderer for {name!r}")

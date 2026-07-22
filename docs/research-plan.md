@@ -5,7 +5,7 @@ Large language models can generate fluent and seemingly authoritative responses 
 
 Recent work indicates that factual correctness, uncertainty, and hallucination risk are partially represented in the internal activations of language models. The baseline paper demonstrates that adding a contrastively derived steering vector to internal FFN or MoE activations can substantially change model behavior at inference time, reducing incorrect responses and increasing admissions of uncertainty without retraining the full model. However, the reported results also reveal important limitations, including increased abstention, higher perplexity, and occasional language drift. 
 
-This study builds on that approach by investigating whether activation steering can be made more adaptive, selective, and behaviorally precise. Instead of applying one fixed direction to every prompt, the proposed experiments examine prompt-conditioned steering, sparse and disentangled interventions, and the interaction between internal steering and system-level instructions. The methods will be evaluated on AA-Omniscience, SimpleQA Verified, and TriviaQA using the single, exactly pinned `mlx-community/Qwen3.6-27B-4bit` representation of `Qwen/Qwen3.6-27B` on Apple silicon.
+This study builds on that approach by investigating whether activation steering can be made more adaptive, selective, and behaviorally precise. Instead of applying one fixed direction to every prompt, the proposed experiments examine prompt-conditioned steering, sparse and disentangled interventions, and the interaction between internal steering and system-level instructions. The methods will be evaluated on AA-Omniscience, SimpleQA Verified, and TriviaQA using the single, exactly pinned `nvidia/Qwen3.6-27B-NVFP4` representation of `Qwen/Qwen3.6-27B` on one NVIDIA A100-SXM4 40GB.
 
 ## Motivation
 
@@ -77,23 +77,23 @@ These should remain separate experimental factors. Otherwise, the effects of ada
 
 ## 2.2 Approved local single-model amendment
 
-The approved local experiment uses `Qwen/Qwen3.6-27B` on an Apple M4 Max with 48 GiB unified memory. Every E0–E10 work directory and ledger belongs to the `qwen36-27b-mlx4-m4max48-v1` study namespace. The exact single-model decision is frozen in `configs/experiments/model-selection-amendment.json`; no legacy-model artifact is a prerequisite.
+The approved experiment uses `Qwen/Qwen3.6-27B` on a Linux/x86_64 host with one NVIDIA A100-SXM4 40GB (SM80). Every E0–E10 work directory and ledger belongs to the `qwen36-27b-nvfp4-a10040-v1` study namespace. The exact single-model decision is frozen in `configs/experiments/model-selection-amendment.json`; no legacy-model artifact is a prerequisite.
 
 The sole active model is:
 
 | Role | Exact checkpoint and runtime |
 | --- | --- |
-| Activation extraction, steering, probes, SAE work, adaptive controllers, and final evaluation | Uniform affine group-64 4-bit MLX artifact `mlx-community/Qwen3.6-27B-4bit` at revision `c000ac2c2057d94be3fa931000c31723aac53282`, representing `Qwen/Qwen3.6-27B`, using official `mlx==0.31.2` and `mlx-lm==0.31.3` |
+| Activation extraction, steering, probes, SAE work, adaptive controllers, and final evaluation | NVIDIA ModelOpt mixed FP8/NVFP4 artifact `nvidia/Qwen3.6-27B-NVFP4` at revision `0893e1606ff3d5f97a441f405d5fc541a6bdf404`, representing `Qwen/Qwen3.6-27B`, using `vllm==0.24.0` |
 
-The pinned runtime artifact has 64 text blocks, hidden size 5,120, 48 linear-attention blocks, 16 full-attention blocks, and a 16,081,490,064-byte snapshot. The manifest pins all 16 files by Git-blob SHA-1 or LFS SHA-256. The uniform 4-bit artifact was selected instead of a layer-dependent mixed-precision conversion to reduce quantization heterogeneity in the activation study. Before E0, a live preflight on the approved M4 Max must verify the exact model class, tokenizer, complete layer-type sequence, deterministic no-thinking chat rendering, zero-vector parity, exact prompt-token scope, and nonzero cached-continuation sensitivity for all three intervention sites on both a linear-attention and a full-attention block. ([Qwen 3.6 model card][2]) ([Qwen 3.6 MLX artifact][13]) ([MLX-LM][14])
+The pinned runtime artifact has 64 text blocks, hidden size 5,120, 48 linear-attention blocks, 16 full-attention blocks, and a 21,941,623,844-byte snapshot. The manifest pins all 17 files by Git-blob SHA-1 or LFS SHA-256. On SM80, vLLM 0.24.0 executes its mixed checkpoint through Marlin W4A16 for NVFP4 linear layers and MarlinFP8 weight-only handling for FP8 linear layers; it does not use native NVFP4 tensor cores. Before E0, a live preflight on the approved A100 must verify the exact model and quantization config classes, tokenizer, complete layer-type sequence, deterministic no-thinking chat rendering, zero-vector parity, exact prompt-token scope, exact additive edits, and downstream next-token log-probability sensitivity for all three intervention sites on both a linear-attention and a full-attention block. ([Qwen 3.6 model card][2]) ([NVIDIA ModelOpt artifact][13]) ([vLLM 0.24.0][14])
 
-The exact model inventory and static runtime requirements are bound by `configs/models/qwen3.6-27b-mlx-4bit.snapshot.json` and `configs/runtimes/qwen3.6-27b-mlx-4bit-policy.json`. The live preflight command freezes the actual machine identity, macOS build, Xcode/Metal toolchain, hook evidence, code hashes, and peak memory in a non-overwritable receipt. The 500-question cohort and contamination-review artifacts are model-independent and remain valid. A new Qwen E0 must complete inside the Qwen namespace before a new E1 is admitted.
+The exact model inventory and static runtime requirements are bound by `configs/models/qwen3.6-27b-nvfp4.snapshot.json` and `configs/runtimes/qwen3.6-27b-nvfp4-policy.json`. The live preflight command freezes the actual GPU, driver, CUDA, vLLM/PyTorch/Transformers toolchain, quantization loader, hook evidence, code hashes, and peak GPU memory in a non-overwritable receipt. This amendment starts from fresh inputs: the 500-question cohort, contamination scan, blinded review, reviewed splits, and grader bundles must be regenerated and frozen before E0 can complete. A new Qwen E0 must complete inside the Qwen namespace before a new E1 is admitted.
 
 The Colab notebook, bundle, and result-import workflow are retired. Cross-model and cross-runtime replication are outside the current single-model study and require a separately frozen amendment.
 
 ## 2.3 Scope consequence of using one model
 
-All primary comparisons are within the exact Qwen MLX checkpoint: each intervention is paired against its own M0 baseline on the same questions. This design can test the causal and selective-prediction hypotheses, but it cannot establish cross-model or cross-runtime replication. Conclusions must therefore be limited to this model/runtime combination. Any future second model or deployment representation requires a new amendment, independently learned vectors, and a separate confirmatory run.
+All primary comparisons are within the exact Qwen VLLM checkpoint: each intervention is paired against its own M0 baseline on the same questions. This design can test the causal and selective-prediction hypotheses, but it cannot establish cross-model or cross-runtime replication. Conclusions must therefore be limited to this model/runtime combination. Any future second model or deployment representation requires a new amendment, independently learned vectors, and a separate confirmatory run.
 
 ---
 
@@ -259,7 +259,7 @@ Before final testing:
 6. Remove overlapping TriviaQA items from all representation-training sets.
 7. Publish the overlap report.
 
-The exact MLX conversion does not establish a sufficiently precise training-data cutoff for temporal contamination claims. Contamination status must therefore be documented as unknown rather than assumed absent; exact, fuzzy, semantic, and manual overlap checks remain mandatory.
+The exact VLLM conversion does not establish a sufficiently precise training-data cutoff for temporal contamination claims. Contamination status must therefore be documented as unknown rather than assumed absent; exact, fuzzy, semantic, and manual overlap checks remain mandatory.
 
 ---
 
@@ -567,7 +567,7 @@ These controls help distinguish a factuality-specific causal effect from generic
 
 # 8. Layer and token-position search
 
-Use the frozen Qwen MLX candidate set. Because its 64 blocks comprise 48 linear-attention and 16 full-attention blocks, the search deliberately pairs architecture types near the midpoint and three-quarter depth while retaining early, late, and final controls.
+Use the frozen Qwen VLLM candidate set. Because its 64 blocks comprise 48 linear-attention and 16 full-attention blocks, the search deliberately pairs architecture types near the midpoint and three-quarter depth while retaining early, late, and final controls.
 
 | Purpose | Zero-indexed block |
 | --- | ---: |
@@ -675,7 +675,7 @@ This distinguishes:
 
 **Purpose:** Ensure the exact local model/runtime is scientifically usable before representation learning.
 
-Run 500 shared benign factual prompts twice on the sole Qwen 3.6 27B 4-bit MLX checkpoint under deterministic decoding.
+Run 500 shared benign factual prompts twice on the sole Qwen 3.6 27B ModelOpt mixed checkpoint under deterministic decoding.
 
 Measure:
 
@@ -685,9 +685,9 @@ Measure:
 * Latency and memory.
 * Exact snapshot, tokenizer, and chat-template identity.
 * Repeat-run output and token identity.
-* Zero-vector parity and nonzero intervention sensitivity at post-attention residual, MLP-output, and block-output sites in uncached and cached paths.
+* Zero-vector parity, exact additive deltas, and downstream log-probability sensitivity at post-attention residual, MLP-output, and block-output sites.
 
-E0 is complete only after the local MLX artifact replays successfully and the model-independent contamination review is complete. Superseded runtime outputs cannot satisfy this gate.
+E0 is complete only after the local VLLM artifact replays successfully and the model-independent contamination review is complete. Superseded runtime outputs cannot satisfy this gate.
 
 ## E1 — Baseline prompt characterization
 
@@ -1366,15 +1366,15 @@ The 1,000 SimpleQA questions and 600 public AA questions are likely adequate for
 
 ## 17.1 Research runtime
 
-Use the pinned official MLX and MLX-LM releases on Apple Metal for model forward passes, activation extraction, steering injection, cached generation, and teacher-forced answer likelihoods. Use NumPy or PyTorch on CPU/MPS for probes and SAE optimization only when their arrays and checkpoints remain numerically compatible with the MLX activation schema. The runtime must expose the three validated intervention sites while loading the exact released 4-bit weights without conversion.
+Use pinned vLLM 0.24.0 on CUDA for model forward passes, activation extraction, steering injection, deterministic two-pass prefix replay, and teacher-forced answer likelihoods. Use NumPy or PyTorch on CPU/CUDA for probes and SAE optimization only when their arrays and checkpoints remain numerically compatible with the vLLM activation schema. The runtime must expose the three validated intervention sites while loading the exact released ModelOpt mixed checkpoint without conversion.
 
 Pin:
 
 * Model revision, complete snapshot inventory, and verified snapshot digest.
 * Tokenizer and chat-template digests.
-* Official MLX and MLX-LM versions and wheel hashes.
+* Official vLLM version and wheel hashes.
 * Python dependency lock and project metadata digests.
-* macOS, Xcode, Metal compiler/toolchain, chip, and unified-memory identity.
+* Linux, NVIDIA driver, CUDA runtime, A100 compute capability, and GPU-memory identity.
 * Activation site, block, token scope, cache behavior, and random seeds.
 
 ## 17.2 Activation storage
@@ -1391,11 +1391,11 @@ Store:
 
 For centroid construction, use online statistics such as Welford accumulation rather than retaining every activation.
 
-For SAE training, create a separately sampled activation corpus and store it in sharded memory-mapped arrays. An 8x expansion at hidden size 5,120 has roughly 419 million encoder/decoder weights before optimizer state; the 27B model must be unloaded before SAE training, memory must be measured in a pilot, and the expansion or batch size must be reduced if the 48 GiB envelope is exceeded. This resource adjustment may not change the frozen activation corpus or causal-validation gates.
+For SAE training, create a separately sampled activation corpus and store it in sharded memory-mapped arrays. An 8x expansion at hidden size 5,120 has roughly 419 million encoder/decoder weights before optimizer state; the dense 27B model must be unloaded before SAE training, memory must be measured in a pilot, and the expansion or batch size must be reduced if the 40 GB envelope is exceeded. This resource adjustment may not change the frozen activation corpus or causal-validation gates.
 
 ## 17.3 Local execution and memory discipline
 
-The active study has one native MLX runtime. Run one model process at a time, write resumable immutable shards, aggregate centroid statistics online, and release model arrays plus the Metal cache before probe or SAE training. Every long computation must record wall time, peak unified memory, package-lock identity, snapshot digest, and resumable-chain head. Evidence from any other runtime cannot substitute for the registered MLX run.
+The active study has one native vLLM runtime. Run one model process at a time, write resumable immutable shards, aggregate centroid statistics online, and release model arrays plus CUDA allocations before probe or SAE training. Every long computation must record wall time, peak GPU memory, package-lock identity, snapshot digest, and resumable-chain head. Evidence from any other runtime cannot substitute for the registered vLLM run.
 
 ---
 
@@ -1523,10 +1523,10 @@ Use three levels.
 | Full prompt factorial                     |    18 | E9                                              |
 | Side-effect suites and human audit        | 19–20 | Utility, safety, language results               |
 | Frozen composite evaluation               |    21 | E10                                             |
-| Local runtime stress and replay audit      | 22–23 | MLX throughput, memory, and artifact replay     |
+| Local runtime stress and replay audit      | 22–23 | VLLM throughput, memory, and artifact replay     |
 | Statistical analysis and writing          |    24 | Final tables, confidence intervals, paper       |
 
-The approved local version executes only the Qwen 3.6 27B 4-bit MLX checkpoint on the 48 GiB M4 Max. It must stream or aggregate activation statistics and avoid retaining full-token/full-layer activations. The model is unloaded before memory-heavy probe or SAE work. Results from other models or runtimes are not interchangeable evidence.
+The approved version executes only the pinned Qwen 3.6 27B ModelOpt mixed checkpoint on one A100-SXM4 40GB through vLLM 0.24.0. It must stream or aggregate activation statistics and avoid retaining full-token/full-layer activations. The model is unloaded before memory-heavy probe or SAE work. Results from other models or runtimes are not interchangeable evidence.
 
 ---
 
@@ -1544,7 +1544,7 @@ The paper should include:
 8. **Prompt-paraphrase robustness plots.**
 9. **Safety and utility non-inferiority plots.**
 10. **Language-switching confusion matrices.**
-11. **Local MLX runtime identity, intervention-site, latency, and memory results.**
+11. **Local VLLM runtime identity, intervention-site, latency, and memory results.**
 12. **Zero-error confidence-bound table.**
 
 ---
@@ -1567,9 +1567,9 @@ That is a scientifically defensible route toward near-zero observed hallucinatio
 
 [1]: https://arxiv.org/html/2511.13029v1 "https://arxiv.org/html/2511.13029v1"
 [2]: https://huggingface.co/Qwen/Qwen3.6-27B "https://huggingface.co/Qwen/Qwen3.6-27B"
-[3]: https://github.com/ml-explore/mlx "https://github.com/ml-explore/mlx"
-[4]: https://github.com/ml-explore/mlx-lm "https://github.com/ml-explore/mlx-lm"
-[5]: https://github.com/ml-explore/mlx "https://github.com/ml-explore/mlx"
+[3]: https://github.com/vllm-project/vllm "https://github.com/vllm-project/vllm"
+[4]: https://docs.vllm.ai/en/latest/api/vllm/model_executor/layers/quantization/modelopt/ "https://docs.vllm.ai/en/latest/api/vllm/model_executor/layers/quantization/modelopt/"
+[5]: https://github.com/vllm-project/vllm "https://github.com/vllm-project/vllm"
 [6]: https://arxiv.org/abs/1705.03551 "https://arxiv.org/abs/1705.03551"
 [7]: https://arxiv.org/html/2509.07968v2 "https://arxiv.org/html/2509.07968v2"
 [8]: https://arxiv.org/abs/2511.13029 "https://arxiv.org/abs/2511.13029"
@@ -1577,5 +1577,5 @@ That is a scientifically defensible route toward near-zero observed hallucinatio
 [10]: https://arxiv.org/html/2505.16188v1 "https://arxiv.org/html/2505.16188v1"
 [11]: https://arxiv.org/abs/2311.07911 "https://arxiv.org/abs/2311.07911"
 [12]: https://arxiv.org/abs/2308.01263 "https://arxiv.org/abs/2308.01263"
-[13]: https://huggingface.co/mlx-community/Qwen3.6-27B-4bit "https://huggingface.co/mlx-community/Qwen3.6-27B-4bit"
-[14]: https://github.com/ml-explore/mlx-lm/releases/tag/v0.31.3 "https://github.com/ml-explore/mlx-lm/releases/tag/v0.31.3"
+[13]: https://huggingface.co/nvidia/Qwen3.6-27B-NVFP4 "https://huggingface.co/nvidia/Qwen3.6-27B-NVFP4"
+[14]: https://github.com/vllm-project/vllm/releases/tag/v0.24.0 "https://github.com/vllm-project/vllm/releases/tag/v0.24.0"

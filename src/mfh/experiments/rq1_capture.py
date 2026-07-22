@@ -1,4 +1,4 @@
-"""Signed, resumable native-MLX capture shared by all RQ1 fold fits."""
+"""Signed, resumable native-VLLM capture shared by all RQ1 fold fits."""
 
 from __future__ import annotations
 
@@ -35,11 +35,11 @@ from mfh.experiments.e3_construction import VerifiedE3ConstructionSnapshot
 from mfh.experiments.e8_protected import _compose_e8_controller_features
 from mfh.experiments.robustness_diagnostics import RobustnessDiagnosticPlan
 from mfh.inference.architecture import HookKey
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxTeacherForcedCubeOutput,
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmTeacherForcedCubeOutput,
 )
-from mfh.inference.mlx_runtime import MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmRenderedPrompt
 from mfh.methods.features import ActivationFeatureSchema, ActivationKind
 from mfh.methods.probes import ProbeDataset
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
@@ -59,24 +59,24 @@ class RQ1CaptureRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput: ...
+    ) -> VllmPromptFeatureCubeOutput: ...
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxTeacherForcedCubeOutput: ...
+    ) -> VllmTeacherForcedCubeOutput: ...
 
 
 @dataclass(frozen=True, slots=True)

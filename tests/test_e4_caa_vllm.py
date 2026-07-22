@@ -10,16 +10,16 @@ import pytest
 
 from mfh.contracts import ActivationSite, Outcome, PromptSpec, Question
 from mfh.errors import FrozenArtifactError
-from mfh.experiments import e4_caa_mlx
+from mfh.experiments import e4_caa_vllm
 from mfh.experiments.e3_construction import VerifiedE3ConstructionSnapshot
-from mfh.experiments.e4_caa_mlx import (
+from mfh.experiments.e4_caa_vllm import (
     finalize_m2_caa_artifact,
     prepare_m2_caa_work,
     run_m2_caa_work,
     verify_m2_caa_artifact,
     verify_m2_caa_work,
 )
-from mfh.inference.mlx_runtime import MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmRenderedPrompt
 from mfh.provenance import stable_hash
 from tests.e4_test_artifacts import active_qwen_runtime_identity
 
@@ -30,7 +30,7 @@ class _Generation:
         *,
         sequence: int,
         question_id: str,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         outcome: Outcome,
         raw_output: str,
     ) -> None:
@@ -60,7 +60,7 @@ class _Runtime:
     def __init__(
         self,
         identity: dict[str, Any],
-        prompts: dict[str, MlxRenderedPrompt],
+        prompts: dict[str, VllmRenderedPrompt],
         *,
         peak_memory_bytes: int = 1024,
     ) -> None:
@@ -77,13 +77,13 @@ class _Runtime:
         question: str,
         *,
         metadata: dict[str, Any] | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         del prompt, metadata
         return self.prompts[question]
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: tuple[int, ...],
@@ -115,10 +115,10 @@ class _Runtime:
         )
 
 
-def _rendered(question: Question) -> MlxRenderedPrompt:
+def _rendered(question: Question) -> VllmRenderedPrompt:
     text = f"system:neutral\nuser:{question.text}\nassistant:"
     token_ids = (1, 2, int(question.question_id.rsplit("-", 1)[1]) + 3)
-    return MlxRenderedPrompt(
+    return VllmRenderedPrompt(
         text=text,
         sha256=hashlib.sha256(text.encode()).hexdigest(),
         token_ids=token_ids,
@@ -129,7 +129,7 @@ def _rendered(question: Question) -> MlxRenderedPrompt:
     )
 
 
-def test_native_mlx_caa_work_resumes_finalizes_and_replays(
+def test_native_vllm_caa_work_resumes_finalizes_and_replays(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     questions = tuple(
@@ -178,7 +178,7 @@ def test_native_mlx_caa_work_resumes_finalizes_and_replays(
     source.mkdir()
     (source / "source.txt").write_text("frozen E3", encoding="utf-8")
     monkeypatch.setattr(
-        e4_caa_mlx,
+        e4_caa_vllm,
         "load_verified_e3_construction_snapshot",
         lambda *_args, **_kwargs: snapshot,
     )
@@ -275,7 +275,7 @@ def test_interrupted_over_budget_capture_cannot_be_erased_by_resume(
     source.mkdir()
     (source / "source.txt").write_text("frozen E3", encoding="utf-8")
     monkeypatch.setattr(
-        e4_caa_mlx,
+        e4_caa_vllm,
         "load_verified_e3_construction_snapshot",
         lambda *_args, **_kwargs: snapshot,
     )
@@ -291,14 +291,14 @@ def test_interrupted_over_budget_capture_cannot_be_erased_by_resume(
         questions=(question,),
         prompts=prompts,
     )
-    original_session_event = e4_caa_mlx._session_event
+    original_session_event = e4_caa_vllm._session_event
 
     def interrupt_end(*args: Any, **kwargs: Any) -> None:
         if kwargs.get("event") == "end":
             raise RuntimeError("simulated kill before session end")
         original_session_event(*args, **kwargs)
 
-    monkeypatch.setattr(e4_caa_mlx, "_session_event", interrupt_end)
+    monkeypatch.setattr(e4_caa_vllm, "_session_event", interrupt_end)
     with pytest.raises(RuntimeError, match="simulated kill"):
         run_m2_caa_work(
             work,
@@ -308,7 +308,7 @@ def test_interrupted_over_budget_capture_cannot_be_erased_by_resume(
             runtime=_Runtime(
                 identity,
                 rendered,
-                peak_memory_bytes=48 * 1024**3 + 1,
+                peak_memory_bytes=40 * 1024**3 + 1,
             ),
         )
     with pytest.raises(FrozenArtifactError, match="unclosed session"):
@@ -319,7 +319,7 @@ def test_interrupted_over_budget_capture_cannot_be_erased_by_resume(
             prompts=prompts,
         )
 
-    monkeypatch.setattr(e4_caa_mlx, "_session_event", original_session_event)
+    monkeypatch.setattr(e4_caa_vllm, "_session_event", original_session_event)
     resumed = run_m2_caa_work(
         work,
         construction_directory=source,
@@ -328,7 +328,7 @@ def test_interrupted_over_budget_capture_cannot_be_erased_by_resume(
         runtime=_Runtime(identity, rendered),
     )
     assert resumed["complete"] is True
-    assert resumed["maximum_peak_memory_bytes"] == 48 * 1024**3 + 1
+    assert resumed["maximum_peak_memory_bytes"] == 40 * 1024**3 + 1
     assert resumed["scientific_eligible"] is False
     with pytest.raises(FrozenArtifactError, match="not scientifically eligible"):
         finalize_m2_caa_artifact(

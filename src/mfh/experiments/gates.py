@@ -51,7 +51,7 @@ _LEGACY_EVALUATOR_REVISIONS = MappingProxyType(
         "deterministic_decode": frozenset(
             {"fc62b00e14720ab1f9966201f4c51a6b4bc827737fb8885f78b787e6e699543e"}
         ),
-        "mlx_runtime_identity": frozenset(
+        "vllm_runtime_identity": frozenset(
             {"49798c198f3e1cfc3577a7dc9b0bd390a2ccd06f532d5f4de59bb5d8072f8a42"}
         ),
     }
@@ -492,7 +492,7 @@ _DEFINITIONS = {
         lambda m: _integer(m, "checked_prompts") == 500
         and _integer(m, "identity_mismatches") == 0,
     ),
-    "mlx_runtime_identity": _definition(
+    "vllm_runtime_identity": _definition(
         ExperimentPhase.E0,
         ("checked_receipts", "identity_mismatches"),
         "runtime-and-hook-receipts-present-with-zero-identity-mismatches",
@@ -1238,16 +1238,16 @@ def _derive_chat_template(
     return {"checked_prompts": len(records), "identity_mismatches": mismatches}
 
 
-def _derive_mlx_runtime_identity(
+def _derive_vllm_runtime_identity(
     evidence: GateEvidence,
     context: GateEvaluationContext,
 ) -> Mapping[str, Metric]:
     _no_parameters(evidence)
     if evidence.observations:
-        raise DataValidationError("MLX runtime identity is derived from frozen inputs")
+        raise DataValidationError("VLLM runtime identity is derived from frozen inputs")
     required = {"runtime_receipt", "hook_preflight"}
     if not context.frozen_inputs_verified or not required <= set(context.input_fingerprints):
-        raise DataValidationError("MLX runtime identity lacks its two verified receipts")
+        raise DataValidationError("VLLM runtime identity lacks its two verified receipts")
     return {"checked_receipts": len(required), "identity_mismatches": 0}
 
 
@@ -3143,8 +3143,8 @@ def _derive_metrics(
         return _derive_deterministic(evidence, context)
     if gate == "chat_template_identity":
         return _derive_chat_template(evidence, context)
-    if gate == "mlx_runtime_identity":
-        return _derive_mlx_runtime_identity(evidence, context)
+    if gate == "vllm_runtime_identity":
+        return _derive_vllm_runtime_identity(evidence, context)
     if gate == "coverage_reported":
         return _derive_context_reporting(evidence, context, metric_name="conditions_with_coverage")
     if gate == "over_refusal_reported":

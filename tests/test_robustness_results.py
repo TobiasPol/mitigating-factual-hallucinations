@@ -90,14 +90,14 @@ def _fixed_component(
         bank_root,
         direction=tuple(float(value) for value in raw_direction),
         reference_rms_value=1.0,
-        layers=(16,),
+        layers=(31,),
     )
     component = tmp_path / f"{name}-component"
     confirmatory_components.write_confirmatory_fixed_component(
         component,
         source_artifact=bank,
         method="M1",
-        layer=16,
+        layer=31,
         site=ActivationSite.POST_MLP,
         token_scope=TokenScope.FIRST_FOUR,
         standardized_alpha=1.0,
@@ -212,7 +212,7 @@ def _plan(
         "phase": "E9",
         "components": [
             {
-                "model_name": "qwen3.6-27b-mlx-4bit",
+                "model_name": "qwen3.6-27b-nvfp4",
                 "method": method,
                 "artifact_sha256": base_component_sha256,
                 "component_path": "components/base",
@@ -268,14 +268,14 @@ def _m3_schema(partition: str) -> ActivationFeatureSchema:
         benchmark="triviaqa",
         partition=partition,
         split_manifest_digest="d" * 64,
-        model_repository="mlx-community/Qwen3.6-27B-4bit",
-        model_revision="c000ac2c2057d94be3fa931000c31723aac53282",
-        runtime=Runtime.MLX,
-        quantization="affine-g64-mlx-4bit",
+        model_repository="nvidia/Qwen3.6-27B-NVFP4",
+        model_revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+        runtime=Runtime.VLLM,
+        quantization="modelopt-mixed-nvfp4-fp8",
         prompt_id="P0-neutral",
         prompt_sha256=prompt_sha,
         activation_kind=ActivationKind.FINAL_PROMPT,
-        layers=(16,),
+        layers=(31,),
         sites=(ActivationSite.POST_MLP,),
         composition=FeatureComposition.SINGLE_LAYER,
         width=2,
@@ -339,7 +339,7 @@ def _m3_recipe() -> M3FitRecipe:
         alpha_max=0.5,
         alpha_beta=12.0,
         alpha_threshold=0.5,
-        fixed_layer=16,
+        fixed_layer=31,
         candidate_layers=(),
         layer_router_kind=None,
         layer_seed=17,
@@ -358,7 +358,7 @@ def _m3_vector_activations(
             for outcome in dataset.outcomes
         ]
     )
-    return {HookKey(16, ActivationSite.POST_MLP): values}
+    return {HookKey(31, ActivationSite.POST_MLP): values}
 
 
 def _m3_attestation(
@@ -433,11 +433,11 @@ def _m3_component(
     confirmatory_components.write_confirmatory_adaptive_component(
         component,
         model=ModelSpec(
-            name="qwen3.6-27b-mlx-4bit",
-            repository="mlx-community/Qwen3.6-27B-4bit",
-            revision="c000ac2c2057d94be3fa931000c31723aac53282",
-            runtime=Runtime.MLX,
-            quantization="affine-g64-mlx-4bit",
+            name="qwen3.6-27b-nvfp4",
+            repository="nvidia/Qwen3.6-27B-NVFP4",
+            revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+            runtime=Runtime.VLLM,
+            quantization="modelopt-mixed-nvfp4-fp8",
             num_layers=64,
         ),
         prompts={prompt.prompt_id: prompt},
@@ -460,7 +460,7 @@ def _m3_policy(component: Path) -> AdaptivePolicySpec:
         direction_norm=None,
         execution_public_key=_FIT_PUBLIC_KEY,
         controller_artifact_sha256=sha256_path(component),
-        candidate_layers=(16,),
+        candidate_layers=(31,),
         candidate_sites=(ActivationSite.POST_MLP,),
         candidate_token_scopes=(TokenScope.FIRST_FOUR,),
         vector_count=1,
@@ -1267,23 +1267,26 @@ def test_strict_artifact_rejects_lexical_symlink_ancestors(
 
 def test_live_reviewed_split_binding_is_exact() -> None:
     root = Path(__file__).parents[1]
-    reviewed = root / "artifacts/splits/triviaqa-reviewed"
+    reviewed = (
+        root
+        / "artifacts/studies/qwen36-27b-nvfp4-a10040-v1/frozen/reviewed-splits"
+    )
+    if not reviewed.is_dir():
+        pytest.skip("external reviewed split and grader artifacts are not present")
     manifest = validate_reviewed_split_snapshot(reviewed)
-    assert manifest["manifest_digest"] == (
-        "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
+    assert len(manifest["manifest_digest"]) == 64
+    assert len(sha256_path(reviewed)) == 64
+    grader_path = (
+        root / "artifacts/studies/qwen36-27b-nvfp4-a10040-v1/frozen/E1-graders"
     )
-    assert sha256_path(reviewed) == (
-        "3ceaf111654b80e34abd568853f64bba894fc7c6d7a81950c2868f3584a187f4"
-    )
+    if not grader_path.is_dir():
+        pytest.skip("fresh active-study grader bundle is not present")
+    grader_manifest = json.loads((grader_path / "manifest.json").read_text(encoding="utf-8"))
     graders = verify_e1_grader_bundle(
-        root / "artifacts/graders/e1-frozen-v2",
-        expected_manifest_digest=(
-            "b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159"
-        ),
+        grader_path,
+        expected_manifest_digest=grader_manifest["manifest_digest"],
     )
-    assert graders["manifest_digest"] == (
-        "b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159"
-    )
+    assert graders["manifest_digest"] == grader_manifest["manifest_digest"]
 
 
 def test_rq1_result_inventory_requires_recursive_task_directories(

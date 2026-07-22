@@ -36,20 +36,24 @@ _NLTK_DATA_REVISION = "550b6625bcef1f2abff2ff770a5a0d272c9c6b2a"
 _PUNKT_TAB_SHA256 = "e57f64187974277726a3417ca6f181ec5403676c717672eef6a748a7b20e0106"
 _PUNKT_TAB_DATA_SHA256 = "78ea3406355ecf4456f100fc1f571bfe80883df845adbf4076acc75df31f02c2"
 _UV_VERSION = "0.11.28"
-_UV_EXECUTABLE_SHA256 = "daf24253d9c4fa42e4e9ac24e77d2b9e6d3bd1fee47e56e0bb8caafa69903dd8"
+_UV_EXECUTABLE_SHA256 = "1cb9cd0a1749debf6049d7d2bb933882cc52d81016326ee6d99a786d6c988b03"
 _PYTHON_VERSION = "3.11.14"
 _PYTHON_RUNTIME_SOURCE = (
-    "~/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none"
+    "~/.local/share/mfh/cpython-3.11.14+20260211-x86_64-unknown-linux-gnu-stripped"
 )
 _PYTHON_EXECUTABLE = "python-runtime/bin/python3.11"
 _PYTHON_EXECUTABLE_SHA256 = (
-    "4695e61f0cc7be76d68112103091aeb46625720608bd520de59a6885f7fa0227"
+    "6ff97f602038740073dca96714310a30e303332326268e0f1bb2767edc820944"
+)
+_PYTHON_RUNTIME_SOURCE_SHA256 = (
+    "0fe9b60adc070445a70efa17a27ba85a5a8865b40f34b2b42426de9c4ea673eb"
 )
 _PYTHON_RUNTIME_SHA256 = (
-    "e919befcdd4c9b60f39ee45ac77765f74c769acdf602c2670c20be0cbdce04c5"
+    "0fe9b60adc070445a70efa17a27ba85a5a8865b40f34b2b42426de9c4ea673eb"
 )
-_PLATFORM_SYSTEM = "Darwin"
-_PLATFORM_MACHINE = "arm64"
+_PLATFORM_SYSTEM = "Linux"
+_PLATFORM_MACHINE = "x86_64"
+_RUNTIME_PLATFORM = "linux-x86_64"
 _REQUIREMENT_VERSIONS = {
     "absl-py": "2.3.1",
     "click": "8.4.2",
@@ -82,7 +86,7 @@ _REQUIREMENT_HASHES = {
         "1e209d2b3009110635ed9709a67a1a3e33a10f799490fa71cf4bec218c11c88a",
     ),
     "regex": (
-        "8331484450b3894298bef8abecce532171ff6ac60b71f999eed10f2c01941a8a",
+        "724ee9379568658ec06362cf24325c5315cc5a67f61dfe585bfeff58300a355b",
     ),
     "six": (
         "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
@@ -100,7 +104,7 @@ _REQUIREMENTS = "".join(
     for name, version in _REQUIREMENT_VERSIONS.items()
 )
 _RUNTIME_PACKAGES_SHA256 = (
-    "e576cdff8c8b0145a27a027a6b07b48b8d4f607a727597d57563453a329853ec"
+    "7a42d67ca29c955d3ecf582c958600c10b314c1095ca1db1f33040241d16534c"
 )
 _PACKAGE_INIT_SOURCE = '"""Frozen Google Research IFEval evaluator."""\n'
 _PACKAGE_INIT_SHA256 = "cac369e92ab8de249ed31b2f837884bb8b235acfe6085fef7236e722a616784d"
@@ -214,7 +218,7 @@ def _sanitized_runtime_environment() -> dict[str, str]:
         key: value
         for key, value in os.environ.items()
         if not key.startswith(
-            ("UV_", "PIP_", "PYTHON", "VIRTUAL_ENV", "CONDA", "DYLD_")
+            ("UV_", "PIP_", "PYTHON", "VIRTUAL_ENV", "CONDA", "DYLD_", "LD_")
         )
     }
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -229,10 +233,10 @@ def _frozen_python_runtime_source() -> Path:
         or platform.machine() != _PLATFORM_MACHINE
         or not runtime.is_dir()
         or runtime.is_symlink()
-        or sha256_path(runtime) != _PYTHON_RUNTIME_SHA256
+        or sha256_path(runtime) != _PYTHON_RUNTIME_SOURCE_SHA256
     ):
         raise OptionalDependencyError(
-            "IFEval requires the exact frozen relocatable macOS-arm64 Python runtime"
+            "IFEval requires the exact frozen relocatable Linux-x86_64 Python runtime"
         )
     return runtime
 
@@ -331,7 +335,7 @@ def materialize_ifeval_evaluator(directory: str | Path) -> str:
                     "--python",
                     str(python_executable),
                     "--python-platform",
-                    "aarch64-apple-darwin",
+                    "x86_64-unknown-linux-gnu",
                     "--default-index",
                     "https://pypi.org/simple",
                     "--keyring-provider",
@@ -407,12 +411,12 @@ def materialize_ifeval_evaluator(directory: str | Path) -> str:
         if punkt_data_sha != _PUNKT_TAB_DATA_SHA256:
             raise FrozenArtifactError("extracted NLTK punkt_tab data changed")
         body = {
-            "schema_version": 7,
+            "schema_version": 8,
             "repository": _REPOSITORY,
             "revision": _REVISION,
             "license": "Apache-2.0",
             "package": _PACKAGE,
-            "runtime_platform": "macos-arm64",
+            "runtime_platform": _RUNTIME_PLATFORM,
             "uv_version": _UV_VERSION,
             "uv_executable_sha256": _UV_EXECUTABLE_SHA256,
             "python_version": _PYTHON_VERSION,
@@ -480,12 +484,12 @@ def validate_ifeval_evaluator(directory: str | Path) -> str:
         raise FrozenArtifactError("IFEval evaluator manifest is invalid")
     digest = manifest.pop("manifest_digest", None)
     expected = {
-        "schema_version": 7,
+        "schema_version": 8,
         "repository": _REPOSITORY,
         "revision": _REVISION,
         "license": "Apache-2.0",
         "package": _PACKAGE,
-        "runtime_platform": "macos-arm64",
+        "runtime_platform": _RUNTIME_PLATFORM,
         "uv_version": _UV_VERSION,
         "uv_executable_sha256": _UV_EXECUTABLE_SHA256,
         "python_version": _PYTHON_VERSION,

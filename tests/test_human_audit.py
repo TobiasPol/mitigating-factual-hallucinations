@@ -25,7 +25,7 @@ from mfh.provenance import stable_hash
 ROOT = Path(__file__).parents[1]
 PROTOCOL = ROOT / "configs" / "analysis" / "confirmatory.yaml"
 MODELS = (
-    "mlx-community/Qwen3.6-27B-4bit",
+    "nvidia/Qwen3.6-27B-NVFP4",
 )
 BENCHMARKS = (
     "triviaqa",
@@ -50,8 +50,8 @@ def _record(
         benchmark=benchmark,
         model_repository=model,
         model_revision="a" * 40,
-        runtime=Runtime.MLX,
-        quantization="affine-g64-mlx-4bit",
+        runtime=Runtime.VLLM,
+        quantization="modelopt-mixed-nvfp4-fp8",
         system_prompt_id="P0-neutral",
         rendered_prompt_hash="b" * 64,
         steering_method=method,

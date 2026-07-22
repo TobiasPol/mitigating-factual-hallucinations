@@ -1,0 +1,12 @@
+schema_version: 1
+model:
+  name: qwen3.6-27b-nvfp4
+  repository: nvidia/Qwen3.6-27B-NVFP4
+  revision: 0893e1606ff3d5f97a441f405d5fc541a6bdf404
+  runtime: vllm
+  quantization: modelopt-mixed-nvfp4-fp8
+  num_layers: 64
+  dtype: bfloat16
+  trust_remote_code: false
+  role: sole-activation-research-model
+  candidate_layers: [16, 31, 32, 47, 48, 57, 63]

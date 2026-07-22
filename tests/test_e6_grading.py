@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from urllib.request import Request
@@ -10,6 +11,7 @@ import pytest
 from mfh.contracts import GenerationRecord, Outcome, Question, Runtime
 from mfh.errors import FrozenArtifactError
 from mfh.evaluation.openrouter import OpenRouterTransport
+from mfh.experiments import e6_grading as e6_grading_module
 from mfh.experiments.e6_grading import (
     E6FactualGrader,
     load_e6_official_grader_bundle,
@@ -18,17 +20,16 @@ from mfh.experiments.e6_grading import (
 )
 
 ROOT = Path(__file__).parents[1]
-BUNDLE = ROOT / "artifacts/graders/e1-frozen-v2"
-MANIFEST_DIGEST = "b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159"
+MANIFEST_DIGEST = "b" * 64
 
 
 def _record(benchmark: str, question_id: str) -> GenerationRecord:
     return GenerationRecord(
         question_id=question_id,
         benchmark=benchmark,
-        model_repository="mlx-community/Qwen3.6-27B-4bit",
+        model_repository="nvidia/Qwen3.6-27B-NVFP4",
         model_revision="0" * 40,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization="4bit",
         system_prompt_id="P0-neutral",
         rendered_prompt_hash="1" * 64,
@@ -63,9 +64,30 @@ def test_e6_official_grades_replay_from_portable_bundle(
     provider: str,
     label: str,
     outcome: Outcome,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    bundle_path = tmp_path / "official-graders"
+    bundle_path.mkdir()
+    for name in (
+        "simpleqa-verified.yaml",
+        "simpleqa-verified.prompt.txt",
+        "aa-omniscience-public.yaml",
+        "aa-omniscience-public.prompt.txt",
+    ):
+        shutil.copy2(ROOT / "configs/graders" / name, bundle_path / name)
+    monkeypatch.setattr(
+        e6_grading_module,
+        "verify_e1_grader_bundle",
+        lambda *_args, **_kwargs: {
+            "manifest_digest": MANIFEST_DIGEST,
+            "files": {
+                "simpleqa_config": {"path": "simpleqa-verified.yaml"},
+                "aa_config": {"path": "aa-omniscience-public.yaml"},
+            },
+        },
+    )
     bundle = load_e6_official_grader_bundle(
-        BUNDLE, expected_manifest_digest=MANIFEST_DIGEST
+        bundle_path, expected_manifest_digest=MANIFEST_DIGEST
     )
 
     def sender(request: Request, _timeout: float) -> tuple[int, bytes]:

@@ -55,15 +55,15 @@ from mfh.experiments.runtime_evidence import (
     build_generation_runtime_metrics,
     validate_generation_runtime_metrics,
 )
-from mfh.inference.mlx_research import (
-    MlxResearchInterventionState,
-    MlxResearchRuntime,
-    MlxTeacherForcedOutput,
+from mfh.inference.vllm_research import (
+    VllmResearchInterventionState,
+    VllmResearchRuntime,
+    VllmTeacherForcedOutput,
 )
-from mfh.inference.mlx_runtime import (
-    MlxGenerationOutput,
-    MlxInterventionState,
-    MlxRenderedPrompt,
+from mfh.inference.vllm_runtime import (
+    VllmGenerationOutput,
+    VllmInterventionState,
+    VllmRenderedPrompt,
     as_numpy,
 )
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
@@ -81,15 +81,15 @@ _EXPECTED_QUESTION_COUNTS = {
 
 
 class E6RuntimeAttestor:
-    """Runtime-owned E6 signer bound to one concrete MLX runtime identity."""
+    """Runtime-owned E6 signer bound to one concrete VLLM runtime identity."""
 
     __slots__ = ("_artifact", "_private_key", "execution_public_key", "runtime")
 
-    def __init__(self, runtime: MlxResearchRuntime, *, execution_private_key: str) -> None:
-        if type(runtime) is not MlxResearchRuntime or _SHA256.fullmatch(
+    def __init__(self, runtime: VllmResearchRuntime, *, execution_private_key: str) -> None:
+        if type(runtime) is not VllmResearchRuntime or _SHA256.fullmatch(
             execution_private_key
         ) is None:
-            raise DataValidationError("E6 attestor requires a concrete MLX runtime and key")
+            raise DataValidationError("E6 attestor requires a concrete VLLM runtime and key")
         try:
             private_key = Ed25519PrivateKey.from_private_bytes(
                 bytes.fromhex(execution_private_key)
@@ -138,21 +138,21 @@ class E6RuntimeAttestor:
             raise FrozenArtifactError("E6 runtime attestation differs from the executing runtime")
         return sha256_file(source)
 
-    def assert_live_runtime(self, runtime: MlxResearchRuntime) -> str:
+    def assert_live_runtime(self, runtime: VllmResearchRuntime) -> str:
         """Re-attest the exact live runtime object before trusted execution or signing."""
 
-        if type(runtime) is not MlxResearchRuntime or runtime is not self.runtime:
+        if type(runtime) is not VllmResearchRuntime or runtime is not self.runtime:
             raise FrozenArtifactError("E6 attestor runtime object was replaced")
         try:
             identity = json.loads(
                 json.dumps(dict(runtime.runtime_identity()), sort_keys=True, allow_nan=False)
             )
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise FrozenArtifactError(f"cannot re-attest live MLX runtime: {exc}") from exc
+            raise FrozenArtifactError(f"cannot re-attest live VLLM runtime: {exc}") from exc
         _validate_e6_runtime_identity(identity)
         expected = self._artifact.get("runtime_identity")
         if identity != expected:
-            raise FrozenArtifactError("live MLX runtime identity changed after attestation")
+            raise FrozenArtifactError("live VLLM runtime identity changed after attestation")
         return stable_hash(identity)
 
     @property
@@ -210,20 +210,26 @@ def _load_e6_runtime_attestation(path: str | Path) -> dict[str, Any]:
 def _validate_e6_runtime_identity(identity: Mapping[str, Any]) -> None:
     expected_keys = {
         "backend",
-        "mlx",
-        "mlx_lm",
+        "vllm",
+        "transformers",
         "python",
-        "machine_model",
-        "chip",
-        "unified_memory_bytes",
-        "physical_cpu_cores",
         "architecture",
         "os",
-        "os_build",
-        "model_class",
-        "tokenizer_class",
-        "num_layers",
+        "nvidia_driver",
         "seed",
+        "tokenizer_class",
+        "tensor_parallel_size",
+        "quantization_loader",
+        "quantization_config_class",
+        "quantization_execution",
+        "model_class",
+        "num_layers",
+        "hidden_size",
+        "gpu_name",
+        "gpu_total_memory_bytes",
+        "cuda_capability",
+        "cuda_runtime",
+        "torch",
         "model_repository",
         "model_revision",
         "model_quantization",
@@ -233,10 +239,11 @@ def _validate_e6_runtime_identity(identity: Mapping[str, Any]) -> None:
         "research_toolchain",
     }
     text_keys = expected_keys - {
-        "unified_memory_bytes",
-        "physical_cpu_cores",
+        "gpu_total_memory_bytes",
         "num_layers",
+        "hidden_size",
         "seed",
+        "tensor_parallel_size",
         "model_num_layers",
         "research_provenance",
         "research_toolchain",
@@ -245,27 +252,47 @@ def _validate_e6_runtime_identity(identity: Mapping[str, Any]) -> None:
     toolchain = identity.get("research_toolchain")
     if (
         set(identity) != expected_keys
-        or identity.get("backend") != "mlx"
+        or identity.get("backend") != "vllm"
+        or identity.get("vllm") != "0.24.0"
+        or identity.get("architecture") != "x86_64"
+        or identity.get("model_class")
+        != "vllm.model_executor.models.qwen3_5.Qwen3_5ForConditionalGeneration"
+        or identity.get("cuda_capability") != "8.0"
+        or identity.get("tensor_parallel_size") != 1
+        or identity.get("quantization_loader") != "modelopt_mixed"
+        or identity.get("quantization_config_class")
+        != (
+            "vllm.model_executor.layers.quantization.modelopt."
+            "ModelOptMixedPrecisionConfig"
+        )
+        or identity.get("quantization_execution")
+        != "marlin-w4a16-fp8-weight-only-on-sm80"
+        or not isinstance(identity.get("gpu_name"), str)
+        or "A100" not in str(identity.get("gpu_name"))
         or any(type(identity.get(key)) is not str or not identity[key] for key in text_keys)
         or _SHA256.fullmatch(str(identity.get("snapshot_sha256"))) is None
         or any(
             type(identity.get(key)) is not int or identity[key] <= 0
             for key in (
-                "unified_memory_bytes",
-                "physical_cpu_cores",
+                "gpu_total_memory_bytes",
                 "num_layers",
+                "hidden_size",
                 "model_num_layers",
             )
         )
+        or int(identity.get("gpu_total_memory_bytes", 0)) < 40_000_000_000
+        or identity.get("num_layers") != 64
+        or identity.get("hidden_size") != 5_120
         or type(identity.get("seed")) is not int
         or identity.get("num_layers") != identity.get("model_num_layers")
         or not isinstance(provenance, dict)
         or not provenance
         or not isinstance(toolchain, dict)
-        or set(toolchain) != {"xcodebuild", "metal_compiler"}
+        or set(toolchain)
+        != {"vllm", "torch", "transformers", "numpy", "nvidia_driver"}
         or any(type(value) is not str or not value for value in toolchain.values())
     ):
-        raise DataValidationError("E6 requires the full MLX model and toolchain identity")
+        raise DataValidationError("E6 requires the full VLLM model and toolchain identity")
 
 
 def _assert_e6_runtime_condition(
@@ -297,17 +324,17 @@ class E6LikelihoodRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def teacher_forced_continuation(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         site: ActivationSite,
-        intervention_states: Mapping[int, MlxInterventionState] | None = None,
-    ) -> MlxTeacherForcedOutput: ...
+        intervention_states: Mapping[int, VllmInterventionState] | None = None,
+    ) -> VllmTeacherForcedOutput: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -405,7 +432,7 @@ def _direction_identity(direction: Any) -> tuple[str, float]:
 
 
 def _state_spec(
-    states: Mapping[int, MlxInterventionState] | None,
+    states: Mapping[int, VllmInterventionState] | None,
     *,
     layers: tuple[int, ...],
     site: ActivationSite,
@@ -415,7 +442,7 @@ def _state_spec(
         if (
             type(layer) is not int
             or layer not in layers
-            or not isinstance(state, MlxResearchInterventionState)
+            or not isinstance(state, VllmResearchInterventionState)
             or state.direction is None
             or isinstance(state.alpha, bool)
             or not isinstance(state.alpha, int | float)
@@ -437,7 +464,7 @@ def _state_spec(
             or state.phase_armed
             or state.prompt_tokens_remaining != 0
         ):
-            raise DataValidationError("E6 intervention state is not a fresh material MLX state")
+            raise DataValidationError("E6 intervention state is not a fresh material VLLM state")
         direction_sha256, direction_norm = _direction_identity(state.direction)
         frozen_states.append(
             {
@@ -460,17 +487,17 @@ def _state_spec(
 
 def _runtime_receipt(
     *,
-    rendered: MlxRenderedPrompt,
+    rendered: VllmRenderedPrompt,
     response_text_sha256: str,
-    output: MlxTeacherForcedOutput,
-    states: Mapping[int, MlxInterventionState] | None,
+    output: VllmTeacherForcedOutput,
+    states: Mapping[int, VllmInterventionState] | None,
     state_spec: Mapping[str, Any],
 ) -> dict[str, Any]:
     executions: list[dict[str, Any]] = []
     for state_item in state_spec["states"]:
         layer = state_item["layer"]
         state = dict(states or {})[layer]
-        assert isinstance(state, MlxResearchInterventionState)
+        assert isinstance(state, VllmResearchInterventionState)
         if (
             not state.phase_armed
             or state.prompt_tokens_remaining != 0
@@ -599,12 +626,12 @@ def _validate_runtime_receipt(value: Mapping[str, Any]) -> dict[str, Any]:
 
 def _score(
     runtime: E6LikelihoodRuntime,
-    rendered: MlxRenderedPrompt,
+    rendered: VllmRenderedPrompt,
     response: str,
     *,
     layers: tuple[int, ...],
     site: ActivationSite,
-    state_factory: Callable[[], Mapping[int, MlxInterventionState]] | None,
+    state_factory: Callable[[], Mapping[int, VllmInterventionState]] | None,
 ) -> E6ScoredResponse:
     states = dict(state_factory()) if state_factory is not None else None
     state_spec = _state_spec(states, layers=layers, site=site)
@@ -617,7 +644,7 @@ def _score(
     )
     text_sha = hashlib.sha256(response.encode("utf-8")).hexdigest()
     if (
-        type(output) is not MlxTeacherForcedOutput
+        type(output) is not VllmTeacherForcedOutput
         or output.response_text_sha256 != text_sha
         or tuple(output.activations) != layers
     ):
@@ -811,7 +838,7 @@ def score_e6_question(
     condition_id: str,
     layers: Sequence[int],
     site: ActivationSite,
-    state_factory: Callable[[], Mapping[int, MlxInterventionState]] | None = None,
+    state_factory: Callable[[], Mapping[int, VllmInterventionState]] | None = None,
 ) -> E6LikelihoodRecord:
     frozen_layers = tuple(layers)
     raw_alternatives = question.metadata.get(_ALTERNATIVES_KEY, ())
@@ -1273,14 +1300,14 @@ def execute_and_bind_e6_likelihood(
     condition: EvaluationCondition,
     layers: Sequence[int],
     site: ActivationSite,
-    state_factory: Callable[[], Mapping[int, MlxInterventionState]] | None,
+    state_factory: Callable[[], Mapping[int, VllmInterventionState]] | None,
     question_bundle_sha256: str,
     e3_tensor_index: Sequence[Any] | None = None,
     max_new_tokens: int = 32,
     populate_generation: bool = False,
     generation_grader: Callable[[GenerationRecord], GenerationRecord] | None = None,
 ) -> E6ExecutedRow:
-    """Score and sign E6 evidence through the concrete trusted MLX runtime."""
+    """Score and sign E6 evidence through the concrete trusted VLLM runtime."""
 
     normalized = validate_active_study_artifact_paths(
         {
@@ -1311,7 +1338,7 @@ def execute_and_bind_e6_likelihood(
             intervention_states={},
         )
         if populate_generation:
-            if type(generated) is not MlxGenerationOutput:
+            if type(generated) is not VllmGenerationOutput:
                 raise DataValidationError("E6 M0 runtime returned an invalid generation")
             if (
                 generation_record.raw_output
@@ -1347,7 +1374,7 @@ def execute_and_bind_e6_likelihood(
                 ):
                     raise DataValidationError("E6 M0 grader changed generated runtime facts")
         if (
-            type(generated) is not MlxGenerationOutput
+            type(generated) is not VllmGenerationOutput
             or generated.rendered_prompt != rendered
             or generation_record.rendered_prompt_hash != rendered.sha256
             or generation_record.raw_output != generated.text
@@ -1423,7 +1450,7 @@ def execute_and_bind_e6_likelihood(
         state = states[condition.layer]
         direction = as_numpy(state.direction, dtype=np.float32)
         if (
-            type(state) is not MlxResearchInterventionState
+            type(state) is not VllmResearchInterventionState
             or direction.ndim != 1
             or hashlib.sha256(direction.tobytes(order="C")).hexdigest()
             != direction_sha256
@@ -1444,7 +1471,7 @@ def execute_and_bind_e6_likelihood(
             intervention_states={(condition.layer, condition.site): state},
         )
         if populate_generation:
-            if type(generated) is not MlxGenerationOutput:
+            if type(generated) is not VllmGenerationOutput:
                 raise DataValidationError("E6 M1 runtime returned an invalid generation")
             if (
                 generation_record.raw_output
@@ -1480,7 +1507,7 @@ def execute_and_bind_e6_likelihood(
                 ):
                     raise DataValidationError("E6 M1 grader changed generated runtime facts")
         if (
-            type(generated) is not MlxGenerationOutput
+            type(generated) is not VllmGenerationOutput
             or generated.rendered_prompt != rendered
             or generation_record.rendered_prompt_hash != rendered.sha256
             or generation_record.raw_output != generated.text

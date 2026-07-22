@@ -1,4 +1,4 @@
-"""Portable risk-gated ACT/SADI-style baseline for the native MLX E4 screen."""
+"""Portable risk-gated ACT/SADI-style baseline for the native VLLM E4 screen."""
 
 from __future__ import annotations
 
@@ -119,10 +119,10 @@ def _selected_e2_risk_probe(
     if (
         probe.task is not ProbeTask.CORRECT_INCORRECT_ABSTENTION
         or probe.state.labels != ("C", "I", "A")
-        or schema.model_repository != "mlx-community/Qwen3.6-27B-4bit"
-        or schema.model_revision != "c000ac2c2057d94be3fa931000c31723aac53282"
-        or schema.runtime is not Runtime.MLX
-        or schema.quantization != "affine-g64-mlx-4bit"
+        or schema.model_repository != "nvidia/Qwen3.6-27B-NVFP4"
+        or schema.model_revision != "0893e1606ff3d5f97a441f405d5fc541a6bdf404"
+        or schema.runtime is not Runtime.VLLM
+        or schema.quantization != "modelopt-mixed-nvfp4-fp8"
         or schema.prompt_id != "P0-neutral"
         or schema.activation_kind is not ActivationKind.FINAL_PROMPT
         or schema.composition is not FeatureComposition.SINGLE_LAYER

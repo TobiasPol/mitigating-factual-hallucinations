@@ -40,7 +40,7 @@ from mfh.experiments.runtime_evidence import (
     build_generation_runtime_metrics,
     validate_generation_runtime_metrics,
 )
-from mfh.inference.mlx_runtime import as_numpy
+from mfh.inference.vllm_runtime import as_numpy
 from mfh.methods.features import (
     ActivationFeatureSchema,
     ActivationKind,
@@ -586,7 +586,7 @@ def execute_e8_behavior_activation_bundle(
     prompt: PromptSpec,
     feature_schema: ActivationFeatureSchema,
 ) -> str:
-    """Capture every protected-behavior activation through the native MLX runtime.
+    """Capture every protected-behavior activation through the native VLLM runtime.
 
     Positive and negative examples are derived from the complete matched M0/M4b
     E7 ledger. The caller cannot supply behavior labels or question identifiers.
@@ -608,7 +608,7 @@ def execute_e8_behavior_activation_bundle(
     from mfh.experiments.runner import PhaseRunLedger
 
     if type(attestor) is not E6RuntimeAttestor:
-        raise DataValidationError("E8 activation capture requires the exact MLX attestor")
+        raise DataValidationError("E8 activation capture requires the exact VLLM attestor")
     if (
         feature_schema.activation_kind is not ActivationKind.FINAL_PROMPT
         or feature_schema.composition is not FeatureComposition.SINGLE_LAYER
@@ -1983,9 +1983,9 @@ def _compose_e8_controller_features(
     """Compose one runtime-owned prompt feature row exactly as declared by E5."""
 
     if feature_schema.activation_kind is not ActivationKind.FINAL_PROMPT:
-        raise DataValidationError("adaptive MLX execution requires final-prompt features")
+        raise DataValidationError("adaptive VLLM execution requires final-prompt features")
     try:
-        ordered = {
+        ordered: dict[ActivationSite, list[np.ndarray[Any, Any]]] = {
             site: [
                 np.asarray(activations[site][layer], dtype=np.float32).reshape(-1)
                 for layer in feature_schema.layers
@@ -1996,6 +1996,7 @@ def _compose_e8_controller_features(
         raise DataValidationError(
             f"adaptive prompt feature cube differs from its schema: {exc}"
         ) from exc
+    parts: list[np.ndarray[Any, Any]]
     if feature_schema.composition is FeatureComposition.SINGLE_LAYER:
         parts = [values[0] for values in ordered.values()]
     elif feature_schema.composition is FeatureComposition.CONCATENATED_LAYERS:
@@ -2075,7 +2076,7 @@ def execute_e8_adaptive_generation(
     populate_generation: bool = False,
     generation_grader: Callable[[GenerationRecord], GenerationRecord] | None = None,
 ) -> GenerationRecord:
-    """Capture, route, execute, and sign one E6/E8 M3 decision through native MLX."""
+    """Capture, route, execute, and sign one E6/E8 M3 decision through native VLLM."""
 
     from mfh.experiments.e6_likelihood import E6RuntimeAttestor
     from mfh.experiments.runner import (
@@ -2083,8 +2084,8 @@ def execute_e8_adaptive_generation(
         adaptive_execution_receipt_body,
         adaptive_policy_decision_digest,
     )
-    from mfh.inference.mlx_research import MlxResearchInterventionState
-    from mfh.inference.mlx_runtime import MlxGenerationOutput
+    from mfh.inference.vllm_research import VllmResearchInterventionState
+    from mfh.inference.vllm_runtime import VllmGenerationOutput
     from mfh.methods.adaptive import load_adaptive_controller
 
     if type(attestor) is not E6RuntimeAttestor or type(condition) is not EvaluationCondition:
@@ -2237,7 +2238,7 @@ def execute_e8_adaptive_generation(
     alpha = 0.0
     direction_norm = 0.0
     normalized_direction: np.ndarray[Any, Any] | None = None
-    state: MlxResearchInterventionState | None = None
+    state: VllmResearchInterventionState | None = None
     interventions: dict[tuple[int, ActivationSite], Any] = {}
     routing_weights = [float(value) for value in decision.routing_weights[0]]
     if action == "intervene":
@@ -2288,8 +2289,8 @@ def execute_e8_adaptive_generation(
         intervention_states=interventions,
     )
     if populate_generation:
-        if type(generated) is not MlxGenerationOutput:
-            raise DataValidationError("adaptive MLX runtime returned an invalid generation")
+        if type(generated) is not VllmGenerationOutput:
+            raise DataValidationError("adaptive VLLM runtime returned an invalid generation")
         if (
             generation_record.raw_output
             or generation_record.normalized_answer
@@ -2309,7 +2310,7 @@ def execute_e8_adaptive_generation(
             output_tokens=generated.output_tokens,
         )
     if (
-        type(generated) is not MlxGenerationOutput
+        type(generated) is not VllmGenerationOutput
         or generated.rendered_prompt != rendered
         or generation_record.rendered_prompt_hash != rendered.sha256
         or generation_record.raw_output != generated.text
@@ -2319,7 +2320,7 @@ def execute_e8_adaptive_generation(
         or generation_record.outcome
         is not deterministic_short_answer_grade(generated.text, question.aliases)
     ):
-        raise DataValidationError("adaptive MLX output differs from its ledger row")
+        raise DataValidationError("adaptive VLLM output differs from its ledger row")
 
     feature_values = np.ascontiguousarray(features.numpy(), dtype=np.float32)
     metadata = {
@@ -2365,7 +2366,7 @@ def execute_e8_adaptive_generation(
             or np.array_equal(captured, intervened)
             or state.applications <= 0
         ):
-            raise DataValidationError("adaptive MLX hook did not execute a material edit")
+            raise DataValidationError("adaptive VLLM hook did not execute a material edit")
         expected_indices = (
             [-1]
             if selected_scope is TokenScope.FINAL_PROMPT
@@ -2431,7 +2432,7 @@ def execute_e8_adaptive_generation(
         scoring_rendered = attestor.runtime.render_prompt(prompt, "", metadata=question.metadata)
         likelihood_layer = selected_layer if selected_layer is not None else 0
         likelihood_site = selected_site or ActivationSite.POST_MLP
-        likelihood_state: MlxResearchInterventionState | None = None
+        likelihood_state: VllmResearchInterventionState | None = None
         likelihood_states: dict[int, Any] = {}
         if action == "intervene":
             assert normalized_direction is not None
@@ -2531,15 +2532,15 @@ def execute_e8_generation(
     populate_generation: bool = False,
     generation_grader: Callable[[GenerationRecord], GenerationRecord] | None = None,
 ) -> GenerationRecord:
-    """Execute a registered E7/E8 fixed method through MLX and sign the edit."""
+    """Execute a registered E7/E8 fixed method through VLLM and sign the edit."""
 
     from mfh.experiments.e6_likelihood import E6RuntimeAttestor
     from mfh.experiments.runner import EvaluationCondition
-    from mfh.inference.mlx_research import (
-        MlxResearchInterventionState,
-        MlxTeacherForcedOutput,
+    from mfh.inference.vllm_research import (
+        VllmResearchInterventionState,
+        VllmTeacherForcedOutput,
     )
-    from mfh.inference.mlx_runtime import MlxGenerationOutput
+    from mfh.inference.vllm_runtime import VllmGenerationOutput
 
     if type(attestor) is not E6RuntimeAttestor or type(condition) is not EvaluationCondition:
         raise DataValidationError("E8 execution requires exact runtime and condition objects")
@@ -2634,7 +2635,7 @@ def execute_e8_generation(
         intervention_states=interventions,
     )
     if populate_generation:
-        if type(generated) is not MlxGenerationOutput:
+        if type(generated) is not VllmGenerationOutput:
             raise DataValidationError("E8 runtime returned an invalid generation")
         if (
             generation_record.raw_output
@@ -2655,7 +2656,7 @@ def execute_e8_generation(
             output_tokens=generated.output_tokens,
         )
     if (
-        type(generated) is not MlxGenerationOutput
+        type(generated) is not VllmGenerationOutput
         or generated.rendered_prompt != rendered
         or generation_record.rendered_prompt_hash != rendered.sha256
         or generation_record.raw_output != generated.text
@@ -2679,7 +2680,7 @@ def execute_e8_generation(
         "decoding_max_new_tokens": max_new_tokens,
     }
     if condition.steering_method != "M0":
-        assert isinstance(state, MlxResearchInterventionState)
+        assert isinstance(state, VllmResearchInterventionState)
         assert normalized_direction is not None
         assert condition.layer is not None
         assert condition.site is not None
@@ -2752,7 +2753,7 @@ def execute_e8_generation(
         scoring_rendered = attestor.runtime.render_prompt(prompt, "", metadata=question.metadata)
         likelihood_layer = condition.layer if condition.layer is not None else 0
         likelihood_site = condition.site or ActivationSite.POST_MLP
-        likelihood_state: MlxResearchInterventionState | None = None
+        likelihood_state: VllmResearchInterventionState | None = None
         likelihood_states: dict[int, Any] = {}
         if condition.steering_method != "M0":
             assert normalized_direction is not None
@@ -2773,7 +2774,7 @@ def execute_e8_generation(
             intervention_states=likelihood_states,
         )
         if (
-            type(likelihood) is not MlxTeacherForcedOutput
+            type(likelihood) is not VllmTeacherForcedOutput
             or likelihood.response_text_sha256 != hashlib.sha256(question.text.encode()).hexdigest()
             or tuple(likelihood.activations) != (likelihood_layer,)
         ):

@@ -1,4 +1,4 @@
-"""Resumable E2 generation resolution and native-MLX prompt capture."""
+"""Resumable E2 generation resolution and native-VLLM prompt capture."""
 
 from __future__ import annotations
 
@@ -29,8 +29,8 @@ from mfh.experiments.activation_store import (
 )
 from mfh.experiments.e2_schedule import E2ScheduleRow, VerifiedE2Workspace
 from mfh.experiments.model_selection import validate_active_study_artifact_paths
-from mfh.inference.mlx_research import MlxPromptFeatureCubeOutput
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_research import VllmPromptFeatureCubeOutput
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.provenance import sha256_file, stable_hash
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -44,19 +44,19 @@ class E2CaptureRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def generate(
-        self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-    ) -> MlxGenerationOutput: ...
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput: ...
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput: ...
+    ) -> VllmPromptFeatureCubeOutput: ...
 
     def runtime_identity(self) -> Mapping[str, Any]: ...
 
@@ -259,7 +259,7 @@ def _validate_generation_evidence(value: Mapping[str, Any]) -> None:
         raise DataValidationError("E2 generation evidence is invalid")
 
 
-def _generation_evidence(generation: MlxGenerationOutput) -> dict[str, Any]:
+def _generation_evidence(generation: VllmGenerationOutput) -> dict[str, Any]:
     value = {
         "raw_output": generation.text,
         "raw_output_sha256": hashlib.sha256(generation.text.encode("utf-8")).hexdigest(),
@@ -329,7 +329,7 @@ def _capture_plan(
     body = {
         "schema_version": 1,
         "phase": "E2",
-        "runner": "resumable-native-mlx-prompt-capture",
+        "runner": "resumable-native-vllm-prompt-capture",
         "runner_source_sha256": sha256_file(Path(__file__)),
         "workspace_plan_identity": workspace.plan_identity,
         "questions_digest": _questions_digest(questions),
@@ -478,7 +478,7 @@ def _load_plan(path: Path) -> dict[str, Any]:
         or type(body.get("runtime_identity")) is not dict
         or body.get("schema_version") != 1
         or body.get("phase") != "E2"
-        or body.get("runner") != "resumable-native-mlx-prompt-capture"
+        or body.get("runner") != "resumable-native-vllm-prompt-capture"
         or body["shard_rows"] <= 0
         or not 1 <= body["max_new_tokens"] <= 48
     ):
@@ -719,7 +719,7 @@ def _make_resolution(
     row: E2ScheduleRow,
     workspace: VerifiedE2Workspace,
     question: Question,
-    rendered: MlxRenderedPrompt,
+    rendered: VllmRenderedPrompt,
     runtime: E2CaptureRuntime,
     source: E1P0Source | None,
     max_new_tokens: int,
@@ -759,9 +759,9 @@ def _capture_row(
     workspace: VerifiedE2Workspace,
     schedule_row: E2ScheduleRow,
     resolution: E2Resolution,
-    rendered: MlxRenderedPrompt,
+    rendered: VllmRenderedPrompt,
     runtime: E2CaptureRuntime,
-) -> tuple[ActivationCaptureRow, np.ndarray, int]:
+) -> tuple[ActivationCaptureRow, np.ndarray[Any, Any], int]:
     output = runtime.prompt_feature_cube(
         rendered,
         layers=workspace.activation_spec.layers,
@@ -1008,7 +1008,7 @@ def run_e2_capture(
         session_head,
     )
     captured_rows: list[ActivationCaptureRow] = []
-    captured_values: list[np.ndarray] = []
+    captured_values: list[np.ndarray[Any, Any]] = []
     processed = 0
     capture_peak_memory_bytes = 0
     status = "error"

@@ -1,4 +1,4 @@
-"""Promote a verified native-MLX E0 bundle into the immutable phase ledger."""
+"""Promote a verified native-VLLM E0 bundle into the immutable phase ledger."""
 
 from __future__ import annotations
 
@@ -23,7 +23,8 @@ from mfh.experiments.runner import (
     PhaseRunContract,
     PhaseRunLedger,
 )
-from mfh.provenance import sha256_path, stable_hash
+from mfh.inference.vllm_preflight import validate_vllm_preflight_receipt
+from mfh.provenance import sha256_path
 
 
 def _read_json(path: Path, context: str) -> dict[str, Any]:
@@ -52,42 +53,44 @@ def _read_jsonl(path: Path, context: str) -> tuple[dict[str, Any], ...]:
     return tuple(rows)
 
 
-def _resolve_hook_preflight(runtime_receipt: Path) -> Path:
-    """Resolve the schema-1 receipt that directly contains live hook evidence."""
+def _resolve_hook_preflight(
+    runtime_receipt: Path,
+    *,
+    project_root: Path,
+    model_config: Path,
+    snapshot_directory: Path,
+    snapshot_manifest: Path,
+) -> Path:
+    """Validate the schema-2 receipt that directly contains live hook evidence."""
 
     if runtime_receipt.is_symlink() or not runtime_receipt.is_file():
-        raise DataValidationError("MLX preflight receipt must be a regular file")
-    receipt = _read_json(runtime_receipt, "MLX preflight receipt")
-    body = dict(receipt)
-    digest = body.pop("receipt_digest", None)
-    intervention = receipt.get("intervention")
-    checks = intervention.get("checks") if isinstance(intervention, Mapping) else None
-    if (
-        receipt.get("schema_version") != 1
-        or receipt.get("status") != "passed"
-        or digest != stable_hash(body)
-        or not isinstance(checks, Mapping)
-        or len(checks) != 6
-        or any(
-            not isinstance(check, Mapping)
-            or check.get("status") != "passed"
-            or check.get("zero_vector_exact_parity") is not True
-            or check.get("scope_exact") is not True
-            or check.get("nonzero_changed_cached_continuation") is not True
-            for check in checks.values()
-        )
-    ):
-        raise DataValidationError("MLX receipt lacks passing live hook-preflight evidence")
+        raise DataValidationError("VLLM preflight receipt must be a regular file")
+    receipt = _read_json(runtime_receipt, "VLLM preflight receipt")
+    policy_value = receipt.get("policy_path")
+    if not isinstance(policy_value, str):
+        raise DataValidationError("VLLM preflight receipt lacks its runtime policy path")
+    root = project_root.resolve()
+    policy_path = (root / policy_value).resolve()
+    if not policy_path.is_relative_to(root):
+        raise DataValidationError("VLLM preflight runtime policy escapes the project root")
+    validate_vllm_preflight_receipt(
+        receipt,
+        project_root=root,
+        model_config=model_config,
+        snapshot_directory=snapshot_directory,
+        snapshot_manifest=snapshot_manifest,
+        runtime_policy=policy_path,
+    )
     return runtime_receipt
 
 
 def _determinism_observations(
-    mlx_directory: Path,
+    vllm_directory: Path,
     *,
     condition: EvaluationCondition,
     question_ids: tuple[str, ...],
 ) -> tuple[dict[str, str], ...]:
-    rows = _read_jsonl(mlx_directory / "records.jsonl", "E0 low-level records")
+    rows = _read_jsonl(vllm_directory / "records.jsonl", "E0 low-level records")
     if len(rows) != 2 * len(question_ids):
         raise DataValidationError("E0 low-level records do not contain two exact repeats")
     observations: list[dict[str, str]] = []
@@ -119,15 +122,19 @@ def finalize_e0_phase_run(
     *,
     completion_receipt: str | Path,
     expected_completion_manifest_digest: str,
-    mlx_directory: str | Path,
-    expected_mlx_manifest_digest: str,
-    expected_mlx_plan_identity: str,
-    mlx_inputs: Mapping[str, Any],
+    vllm_directory: str | Path,
+    expected_vllm_manifest_digest: str,
+    expected_vllm_plan_identity: str,
+    vllm_inputs: Mapping[str, Any],
     review_result_directory: str | Path,
     expected_review_result_manifest_digest: str,
     review_queue_directory: str | Path,
     expected_review_queue_manifest_digest: str,
     review_inputs: Mapping[str, Any],
+    grader_bundle: str | Path,
+    expected_grader_manifest_digest: str,
+    reviewed_splits: str | Path,
+    expected_reviewed_split_manifest_digest: str,
 ) -> PhaseCompletion:
     """Replay all E0 evidence and atomically publish its immutable phase ledger."""
 
@@ -135,51 +142,59 @@ def finalize_e0_phase_run(
         {
             "E0 phase ledger": directory,
             "E0 completion receipt": completion_receipt,
-            "E0 MLX bundle": mlx_directory,
+            "E0 VLLM bundle": vllm_directory,
+            "E1 grader bundle": grader_bundle,
+            "reviewed splits": reviewed_splits,
         }
     )
     output = validated_paths["E0 phase ledger"]
     completion_receipt = validated_paths["E0 completion receipt"]
-    mlx_directory = validated_paths["E0 MLX bundle"]
+    vllm_directory = validated_paths["E0 VLLM bundle"]
+    grader_bundle = validated_paths["E1 grader bundle"]
+    reviewed_splits = validated_paths["reviewed splits"]
     if output.exists():
         raise FrozenArtifactError(f"refusing to overwrite E0 phase run: {output}")
-    mlx_root = Path(mlx_directory)
-    cohort = Path(mlx_inputs["cohort_directory"])
-    snapshot = Path(mlx_inputs["snapshot_directory"])
-    snapshot_manifest = Path(mlx_inputs["snapshot_manifest"])
-    runtime_config = Path(mlx_inputs["runtime_config"])
-    study = load_study_protocol(Path(mlx_inputs["study_config"]))
+    vllm_root = Path(vllm_directory)
+    cohort = Path(vllm_inputs["cohort_directory"])
+    snapshot = Path(vllm_inputs["snapshot_directory"])
+    snapshot_manifest = Path(vllm_inputs["snapshot_manifest"])
+    runtime_config = Path(vllm_inputs["runtime_config"])
+    study = load_study_protocol(Path(vllm_inputs["study_config"]))
 
-    authorized_mlx_fingerprint = sha256_path(mlx_root)
+    authorized_vllm_fingerprint = sha256_path(vllm_root)
 
     capability = authorize_e0_completion_receipt(
         completion_receipt,
         expected_manifest_digest=expected_completion_manifest_digest,
-        mlx_directory=mlx_root,
-        expected_mlx_manifest_digest=expected_mlx_manifest_digest,
-        expected_mlx_plan_identity=expected_mlx_plan_identity,
-        mlx_inputs=mlx_inputs,
+        vllm_directory=vllm_root,
+        expected_vllm_manifest_digest=expected_vllm_manifest_digest,
+        expected_vllm_plan_identity=expected_vllm_plan_identity,
+        vllm_inputs=vllm_inputs,
         review_result_directory=review_result_directory,
         expected_review_result_manifest_digest=expected_review_result_manifest_digest,
         review_queue_directory=review_queue_directory,
         expected_review_queue_manifest_digest=expected_review_queue_manifest_digest,
         review_inputs=review_inputs,
+        grader_bundle=grader_bundle,
+        expected_grader_manifest_digest=expected_grader_manifest_digest,
+        reviewed_splits=reviewed_splits,
+        expected_reviewed_split_manifest_digest=expected_reviewed_split_manifest_digest,
     )
-    if sha256_path(mlx_root) != authorized_mlx_fingerprint:
-        raise FrozenArtifactError("E0 MLX bundle changed during completion authorization")
+    if sha256_path(vllm_root) != authorized_vllm_fingerprint:
+        raise FrozenArtifactError("E0 VLLM bundle changed during completion authorization")
 
-    plan = _read_json(mlx_root / "plan.json", "E0 MLX plan")
+    plan = _read_json(vllm_root / "plan.json", "E0 VLLM plan")
     raw_condition = plan.get("condition")
     if not isinstance(raw_condition, Mapping):
-        raise DataValidationError("E0 MLX plan lacks its evaluation condition")
+        raise DataValidationError("E0 VLLM plan lacks its evaluation condition")
     condition = EvaluationCondition.from_dict(raw_condition)
     if condition.phase is not ExperimentPhase.E0 or condition.study_protocol_digest != study.digest:
-        raise DataValidationError("E0 MLX condition differs from the live study protocol")
+        raise DataValidationError("E0 VLLM condition differs from the live study protocol")
 
     question_ids = tuple(
         question.question_id for question in read_questions(cohort / "questions.jsonl")
     )
-    records = tuple(read_generation_records(mlx_root / "generation-records.jsonl"))
+    records = tuple(read_generation_records(vllm_root / "generation-records.jsonl"))
     if len(question_ids) != 500 or len(records) != 500:
         raise DataValidationError("E0 phase ledger requires exactly 500 questions and records")
 
@@ -188,7 +203,15 @@ def finalize_e0_phase_run(
         "tokenizers": snapshot / "tokenizer.json",
         "chat_templates": snapshot / "chat_template.jinja",
         "runtime_receipt": runtime_config,
-        "hook_preflight": _resolve_hook_preflight(runtime_config),
+        "hook_preflight": _resolve_hook_preflight(
+            runtime_config,
+            project_root=Path.cwd(),
+            model_config=Path(vllm_inputs["model_config"]),
+            snapshot_directory=snapshot,
+            snapshot_manifest=snapshot_manifest,
+        ),
+        "e1_grader_bundle": grader_bundle,
+        "reviewed_splits": reviewed_splits,
     }
     contract = PhaseRunContract(
         phase=ExperimentPhase.E0,
@@ -217,10 +240,10 @@ def finalize_e0_phase_run(
         observations: Mapping[str, tuple[dict[str, str], ...]] = {
             "checkpoint_identity": (),
             "deterministic_decode": _determinism_observations(
-                mlx_root, condition=condition, question_ids=question_ids
+                vllm_root, condition=condition, question_ids=question_ids
             ),
             "chat_template_identity": (),
-            "mlx_runtime_identity": (),
+            "vllm_runtime_identity": (),
         }
         gate_results: dict[str, GateResult] = {}
         for gate in contract.required_gates:
@@ -239,8 +262,8 @@ def finalize_e0_phase_run(
             verified_e0_completion=capability,
         )
         ledger.verify_complete()
-        if sha256_path(mlx_root) != authorized_mlx_fingerprint:
-            raise FrozenArtifactError("E0 MLX bundle changed during phase finalization")
+        if sha256_path(vllm_root) != authorized_vllm_fingerprint:
+            raise FrozenArtifactError("E0 VLLM bundle changed during phase finalization")
         if output.exists():
             raise FrozenArtifactError(f"E0 phase output appeared during finalization: {output}")
         os.replace(stage, output)

@@ -1,4 +1,4 @@
-"""Signed, resumable native-MLX capture for fitting the E5 controller grid."""
+"""Signed, resumable native-VLLM capture for fitting the E5 controller grid."""
 
 from __future__ import annotations
 
@@ -41,11 +41,11 @@ from mfh.experiments.e5_adaptive import E5Protocol
 from mfh.experiments.e5_types import E5FitRecipe
 from mfh.experiments.model_selection import ACTIVE_MODEL_IDENTITIES, ACTIVE_MODEL_NAME
 from mfh.inference.architecture import HookKey
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxTeacherForcedCubeOutput,
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmTeacherForcedCubeOutput,
 )
-from mfh.inference.mlx_runtime import MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmRenderedPrompt
 from mfh.methods.features import (
     ActivationFeatureSchema,
     ActivationKind,
@@ -73,24 +73,24 @@ class E5FitCaptureRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput: ...
+    ) -> VllmPromptFeatureCubeOutput: ...
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxTeacherForcedCubeOutput: ...
+    ) -> VllmTeacherForcedCubeOutput: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,7 +377,7 @@ def _plan_body(
     return {
         "schema_version": 1,
         "phase": "E5-native-fit-capture",
-        "runner": "resumable-signed-native-mlx-prompt-response-pairs-v1",
+        "runner": "resumable-signed-native-vllm-prompt-response-pairs-v1",
         "runner_source_sha256": sha256_file(Path(__file__)),
         "protocol": protocol.to_dict(),
         "recipe": recipe.to_dict(),
@@ -407,7 +407,7 @@ def _plan_body(
             protocol.scientific_eligible
             and snapshot.scientific_eligible
             and hidden_width == 5_120
-            and max_peak_memory_bytes <= 48 * 1024**3
+            and max_peak_memory_bytes <= 40 * 1024**3
             and exact_active_model
             and receipt_bound
         ),
@@ -431,7 +431,7 @@ def prepare_e5_fit_capture(
     protocol: E5Protocol | None = None,
     hidden_width: int = 5_120,
     shard_rows: int = 16,
-    max_peak_memory_bytes: int = 48 * 1024**3,
+    max_peak_memory_bytes: int = 40 * 1024**3,
 ) -> Mapping[str, Any]:
     """Freeze an empty E5 native-capture workspace without loading the model."""
 
@@ -526,7 +526,7 @@ def _load_plan(directory: Path) -> dict[str, Any]:
         or identity != stable_hash(body)
         or body.get("schema_version") != 1
         or body.get("phase") != "E5-native-fit-capture"
-        or body.get("runner") != "resumable-signed-native-mlx-prompt-response-pairs-v1"
+        or body.get("runner") != "resumable-signed-native-vllm-prompt-response-pairs-v1"
         or body.get("runner_source_sha256") != sha256_file(Path(__file__))
         or type(body.get("source_rows")) is not list
         or body.get("source_rows_sha256") != stable_hash(body["source_rows"])
@@ -660,7 +660,9 @@ def _verify_signature(value: Mapping[str, Any], public_key_hex: str) -> None:
         raise FrozenArtifactError("E5 capture shard signature cannot be verified") from exc
 
 
-def _read_payload(path: Path, *, expected_sha256: str) -> tuple[np.ndarray, np.ndarray]:
+def _read_payload(
+    path: Path, *, expected_sha256: str
+) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
     try:
         payload = path.read_bytes()
         if hashlib.sha256(payload).hexdigest() != expected_sha256:
@@ -812,7 +814,7 @@ def verify_e5_fit_capture(
     )
 
 
-def _validated_vector(value: object, *, width: int, label: str) -> np.ndarray:
+def _validated_vector(value: object, *, width: int, label: str) -> np.ndarray[Any, Any]:
     array = np.asarray(value, dtype=np.float32)
     if array.ndim != 1 or array.shape[0] != width or not np.isfinite(array).all():
         raise DataValidationError(f"{label} activation geometry is invalid")
@@ -829,7 +831,7 @@ def _capture_pair(
     site: ActivationSite,
     width: int,
     expected: Mapping[str, Any],
-) -> tuple[np.ndarray, np.ndarray, int]:
+) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], int]:
     rendered = runtime.render_prompt(prompt, question.text, metadata=question.metadata)
     if (
         rendered.sha256 != expected["rendered_prompt_sha256"]
@@ -841,8 +843,8 @@ def _capture_pair(
     response_cube = runtime.teacher_forced_cube(rendered, raw_output, layers=layers, sites=(site,))
     if response_cube.response_text_sha256 != expected["raw_output_sha256"]:
         raise DataValidationError("E5 response capture differs from E3 output")
-    prompt_values: list[np.ndarray] = []
-    response_values: list[np.ndarray] = []
+    prompt_values: list[np.ndarray[Any, Any]] = []
+    response_values: list[np.ndarray[Any, Any]] = []
     for layer in layers:
         raw_prompt = np.asarray(prompt_cube.activations[site][layer], dtype=np.float32)
         raw_response = np.asarray(response_cube.activations[site][layer], dtype=np.float32)
@@ -872,8 +874,8 @@ def _append_shard(
     directory: Path,
     *,
     verified: VerifiedE5FitCapture,
-    prompt_values: np.ndarray,
-    response_values: np.ndarray,
+    prompt_values: np.ndarray[Any, Any],
+    response_values: np.ndarray[Any, Any],
     rows: Sequence[Mapping[str, Any]],
     maximum_peak_memory_bytes: int,
     private_key_hex: str,
@@ -1056,7 +1058,7 @@ def _run_e5_fit_capture_locked(
     if _exact_json(runtime.runtime_identity(), label="E5 live runtime identity") != dict(
         verified.plan["runtime_identity"]
     ):
-        raise FrozenArtifactError("E5 live MLX runtime identity differs from its plan")
+        raise FrozenArtifactError("E5 live VLLM runtime identity differs from its plan")
     if _public_key(private_key_hex) != verified.plan["execution_public_key"]:
         raise DataValidationError("E5 capture signing key differs from its plan")
     if verified.complete:
@@ -1075,8 +1077,8 @@ def _run_e5_fit_capture_locked(
         )
         start = verified.pairs_completed
         expected_rows = verified.plan["source_rows"][start : start + count]
-        prompt_batch: list[np.ndarray] = []
-        response_batch: list[np.ndarray] = []
+        prompt_batch: list[np.ndarray[Any, Any]] = []
+        response_batch: list[np.ndarray[Any, Any]] = []
         maximum_peak = 0
         for expected in expected_rows:
             record = records[expected["source_sequence"]]
@@ -1093,7 +1095,7 @@ def _run_e5_fit_capture_locked(
                 expected=expected,
             )
             if peak > verified.plan["max_peak_memory_bytes"]:
-                raise DataValidationError("E5 native capture exceeded the 48 GiB envelope")
+                raise DataValidationError("E5 native capture exceeded the A100 GPU envelope")
             prompt_batch.append(prompt_values)
             response_batch.append(response_values)
             maximum_peak = max(maximum_peak, peak)
@@ -1114,7 +1116,7 @@ def _run_e5_fit_capture_locked(
     return verified
 
 
-def _compose(values: np.ndarray, view: E2ControllerInputView) -> np.ndarray:
+def _compose(values: np.ndarray[Any, Any], view: E2ControllerInputView) -> np.ndarray[Any, Any]:
     if view.composition is FeatureComposition.SINGLE_LAYER:
         result = values[:, 0, :]
     elif view.composition is FeatureComposition.CONCATENATED_LAYERS:
@@ -1135,7 +1137,7 @@ def load_e5_fit_capture_data(
     prompts: Mapping[str, PromptSpec],
     expected_execution_public_key: str,
 ) -> E5FitCaptureData:
-    """Materialize the verified T-steer datasets after the MLX model is unloaded."""
+    """Materialize the verified T-steer datasets after the VLLM model is unloaded."""
 
     verified = verify_e5_fit_capture(
         directory,
@@ -1145,8 +1147,8 @@ def load_e5_fit_capture_data(
         expected_execution_public_key=expected_execution_public_key,
         require_complete=True,
     )
-    prompt_parts: list[np.ndarray] = []
-    response_parts: list[np.ndarray] = []
+    prompt_parts: list[np.ndarray[Any, Any]] = []
+    response_parts: list[np.ndarray[Any, Any]] = []
     for shard in _shards(Path(directory)):
         manifest = json.loads((shard / "manifest.json").read_text(encoding="utf-8"))
         prompt_values, response_values = _read_payload(
@@ -1174,7 +1176,7 @@ def load_e5_fit_capture_data(
             split_manifest_digest=verified.plan["split_manifest_digest"],
             model_repository=identity["model_repository"],
             model_revision=identity["model_revision"],
-            runtime=Runtime.MLX,
+            runtime=Runtime.VLLM,
             quantization=identity["model_quantization"],
             prompt_id=_PROMPT_ID,
             prompt_sha256=verified.plan["p0_template_sha256"],

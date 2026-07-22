@@ -1,4 +1,4 @@
-"""Immutable, resumable float16 activation shards for the local MLX study."""
+"""Immutable, resumable float16 activation shards for the local VLLM study."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ class ActivationStoreSpec:
         if type(self.expected_rows) is not int or self.expected_rows <= 0:
             raise DataValidationError("activation store expected row count must be positive")
         if self.dtype != "float16":
-            raise DataValidationError("the active MLX protocol requires float16 activation shards")
+            raise DataValidationError("the active VLLM protocol requires float16 activation shards")
         object.__setattr__(self, "model_repository", self.model_repository.strip())
         object.__setattr__(self, "quantization", self.quantization.strip())
         object.__setattr__(self, "layers", layers)
@@ -477,7 +477,7 @@ def verify_activation_store(
 def append_activation_shard(
     directory: str | Path,
     rows: Sequence[ActivationCaptureRow],
-    activations: np.ndarray,
+    activations: np.ndarray[Any, Any],
     *,
     expected_spec: ActivationStoreSpec,
 ) -> VerifiedActivationStore:
@@ -574,7 +574,7 @@ def iter_activation_shards(
     *,
     expected_spec: ActivationStoreSpec,
     verified_store: VerifiedActivationStore | None = None,
-) -> Iterator[tuple[tuple[ActivationCaptureRow, ...], np.ndarray]]:
+) -> Iterator[tuple[tuple[ActivationCaptureRow, ...], np.ndarray[Any, Any]]]:
     source = Path(directory)
     verified = verified_store or verify_activation_store(
         source, expected_spec=expected_spec

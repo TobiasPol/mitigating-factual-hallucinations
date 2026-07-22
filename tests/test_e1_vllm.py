@@ -14,7 +14,7 @@ from mfh.contracts import GenerationRecord, Outcome, Question, Runtime
 from mfh.errors import ConfigurationError, DataValidationError
 from mfh.evaluation.official import GradingRequest, load_official_grader_spec
 from mfh.evaluation.openrouter import OpenRouterTransport, run_openrouter_grader
-from mfh.experiments.e1_mlx import (
+from mfh.experiments.e1_vllm import (
     _grading_checkpoint,
     _grading_checkpoint_matches,
     _outcome_label_rows,
@@ -341,7 +341,7 @@ def _record(benchmark: str, prompt: str, outcome: Outcome, index: int) -> Genera
         benchmark=benchmark,
         model_repository="test/model",
         model_revision="a" * 40,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization="1bit",
         system_prompt_id=prompt,
         rendered_prompt_hash="b" * 64,

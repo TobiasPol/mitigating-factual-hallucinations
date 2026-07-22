@@ -50,7 +50,7 @@ from mfh.experiments.e8_protected import (
     _validate_e8_adaptive_controller_record,
     question_source_fingerprint,
 )
-from mfh.experiments.e9_native import NativeE9MlxBackend
+from mfh.experiments.e9_native import NativeE9VllmBackend
 from mfh.experiments.protocol import ExperimentPhase
 from mfh.experiments.robustness_diagnostics import (
     PromptParaphraseTask,
@@ -122,9 +122,9 @@ _SCOPE_FIELDS = frozenset(
         "layer_selector",
     }
 )
-_QWEN_REPOSITORY = "mlx-community/Qwen3.6-27B-4bit"
-_QWEN_REVISION = "c000ac2c2057d94be3fa931000c31723aac53282"
-_QWEN_QUANTIZATION = "affine-g64-mlx-4bit"
+_QWEN_REPOSITORY = "nvidia/Qwen3.6-27B-NVFP4"
+_QWEN_REVISION = "0893e1606ff3d5f97a441f405d5fc541a6bdf404"
+_QWEN_QUANTIZATION = "modelopt-mixed-nvfp4-fp8"
 _RQ1_COMPONENT_FILES = frozenset({"scope-manifest.json", "fields", "execution-component"})
 
 
@@ -450,7 +450,7 @@ def rq1_m3_fit_capture_attestation_body(
     vector_activations: Mapping[HookKey, Tensor],
     best_layers: Sequence[int] | None = None,
 ) -> dict[str, Any]:
-    """Canonical whole-capture receipt signed by the native MLX execution key."""
+    """Canonical whole-capture receipt signed by the native VLLM execution key."""
 
     if (
         _SHA256.fullmatch(plan_digest) is None
@@ -2095,7 +2095,7 @@ def _validate_generation_identity(
         or record.benchmark != question.benchmark
         or record.model_repository != _QWEN_REPOSITORY
         or record.model_revision != _QWEN_REVISION
-        or record.runtime is not Runtime.MLX
+        or record.runtime is not Runtime.VLLM
         or record.quantization != _QWEN_QUANTIZATION
         or record.system_prompt_id != prompt_id
         or record.steering_method != method
@@ -2208,7 +2208,7 @@ def robustness_evaluation_condition(
                     value
                     for value in descriptors
                     if isinstance(value, Mapping)
-                    and value.get("model_name") == "qwen3.6-27b-mlx-4bit"
+                    and value.get("model_name") == "qwen3.6-27b-nvfp4"
                     and value.get("method") == method
                 ]
                 if isinstance(descriptors, list)
@@ -2239,10 +2239,10 @@ def robustness_evaluation_condition(
                 policy is None
                 or policy.controller_artifact_sha256 != adaptive.fingerprint
                 or adaptive.fingerprint != artifact_sha
-                or adaptive.model_name != "qwen3.6-27b-mlx-4bit"
+                or adaptive.model_name != "qwen3.6-27b-nvfp4"
                 or adaptive.model_repository != _QWEN_REPOSITORY
                 or adaptive.model_revision != _QWEN_REVISION
-                or adaptive.runtime is not Runtime.MLX
+                or adaptive.runtime is not Runtime.VLLM
                 or adaptive.quantization != _QWEN_QUANTIZATION
                 or adaptive.model_num_layers != 64
             ):
@@ -2262,10 +2262,10 @@ def robustness_evaluation_condition(
         phase=ExperimentPhase.E9,
         benchmark=benchmark,
         partition=partition,
-        model_name="qwen3.6-27b-mlx-4bit",
+        model_name="qwen3.6-27b-nvfp4",
         model_repository=_QWEN_REPOSITORY,
         model_revision=_QWEN_REVISION,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=_QWEN_QUANTIZATION,
         model_num_layers=64,
         system_prompt_id=prompt_id,
@@ -2313,7 +2313,7 @@ def _frozen_execution_component(
             value
             for value in descriptors
             if isinstance(value, Mapping)
-            and value.get("model_name") == "qwen3.6-27b-mlx-4bit"
+            and value.get("model_name") == "qwen3.6-27b-nvfp4"
             and value.get("method") == method
         ]
         if isinstance(descriptors, list)
@@ -2404,7 +2404,7 @@ def execute_prompt_paraphrase_task(
     *,
     task: PromptParaphraseTask,
     question: Question,
-    backend: NativeE9MlxBackend,
+    backend: NativeE9VllmBackend,
 ) -> PromptParaphraseResult:
     """Execute, sign, grade, and append one frozen prompt-paraphrase task."""
 
@@ -2491,7 +2491,7 @@ def _base_component_descriptor(
         value
         for value in descriptors
         if isinstance(value, Mapping)
-        and value.get("model_name") == "qwen3.6-27b-mlx-4bit"
+        and value.get("model_name") == "qwen3.6-27b-nvfp4"
         and value.get("method") == method
     ]
     if (
@@ -2677,7 +2677,7 @@ def execute_rq1_evaluation_records(
     task: RQ1GeneralizationTask,
     questions_by_id: Mapping[str, Question],
     adapted_component: str | Path,
-    backend: NativeE9MlxBackend,
+    backend: NativeE9VllmBackend,
 ) -> str:
     """Run the held-out fold with the exact adapted component and signed evidence."""
 

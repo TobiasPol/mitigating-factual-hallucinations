@@ -97,11 +97,11 @@ def _workspace(root: Path):  # type: ignore[no-untyped-def]
         protocol=protocol,
     )
     model = ModelSpec(
-        name="qwen3.6-27b-mlx-4bit",
-        repository="mlx-community/Qwen3.6-27B-4bit",
-        revision="c000ac2c2057d94be3fa931000c31723aac53282",
-        runtime=Runtime.MLX,
-        quantization="affine-g64-mlx-4bit",
+        name="qwen3.6-27b-nvfp4",
+        repository="nvidia/Qwen3.6-27B-NVFP4",
+        revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+        runtime=Runtime.VLLM,
+        quantization="modelopt-mixed-nvfp4-fp8",
         num_layers=64,
     )
     workspace = write_e2_workspace(
@@ -163,7 +163,7 @@ def test_e2_probe_bundle_fits_all_tasks_models_calibrators_and_replays() -> None
         root = Path(directory)
         workspace = _workspace(root)
         protocol = E2ProbeProtocol(
-            candidate_layers=(16,),
+            candidate_layers=(31,),
             candidate_sites=(ActivationSite.POST_MLP,),
             screening_epochs=8,
             final_epochs=8,
@@ -192,7 +192,7 @@ def test_e2_probe_bundle_resumes_from_verified_probe_artifacts() -> None:
         root = Path(directory)
         workspace = _workspace(root)
         protocol = E2ProbeProtocol(
-            candidate_layers=(16,),
+            candidate_layers=(31,),
             candidate_sites=(ActivationSite.POST_MLP,),
             screening_epochs=2,
             final_epochs=2,

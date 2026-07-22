@@ -281,7 +281,7 @@ def _condition(
         model_name=_MODEL_NAME,
         model_repository=str(identity["repository"]),
         model_revision=str(identity["revision"]),
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=str(identity["quantization"]),
         model_num_layers=int(identity["num_layers"]),
         system_prompt_id=evaluation.prompt_id,

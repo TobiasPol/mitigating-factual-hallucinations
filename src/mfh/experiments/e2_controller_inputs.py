@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import Any
 
 import numpy as np
 import torch
@@ -126,7 +127,7 @@ def controller_input_views(
     )
 
 
-def _compose(values: np.ndarray, composition: FeatureComposition) -> np.ndarray:
+def _compose(values: np.ndarray[Any, Any], composition: FeatureComposition) -> np.ndarray[Any, Any]:
     if values.ndim != 3 or values.shape[0] == 0 or values.shape[2] == 0:
         raise DataValidationError("E2 controller-input activation cube is invalid")
     if composition is FeatureComposition.SINGLE_LAYER:
@@ -173,7 +174,7 @@ def build_e2_controller_input_datasets(
     rows_by_partition: dict[str, list[ActivationCaptureRow]] = {
         value: [] for value in _PARTITIONS
     }
-    cubes_by_partition: dict[str, list[np.ndarray]] = {
+    cubes_by_partition: dict[str, list[np.ndarray[Any, Any]]] = {
         value: [] for value in _PARTITIONS
     }
     sequence = 0
@@ -229,7 +230,7 @@ def build_e2_controller_input_datasets(
                 split_manifest_digest=split_manifest_digest,
                 model_repository=workspace.activation_spec.model_repository,
                 model_revision=workspace.activation_spec.model_revision,
-                runtime=Runtime.MLX,
+                runtime=Runtime.VLLM,
                 quantization=workspace.activation_spec.quantization,
                 prompt_id="P0-neutral",
                 prompt_sha256=prompt_template_sha256,

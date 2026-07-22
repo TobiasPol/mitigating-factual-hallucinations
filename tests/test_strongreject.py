@@ -43,7 +43,7 @@ def _record() -> GenerationRecord:
         benchmark="strongreject_or_harmbench",
         model_repository="model/repository",
         model_revision="0" * 40,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization="1bit",
         system_prompt_id="P0-neutral",
         rendered_prompt_hash="a" * 64,

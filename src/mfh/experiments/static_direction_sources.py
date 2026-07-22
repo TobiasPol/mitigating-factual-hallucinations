@@ -7,6 +7,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -14,7 +15,7 @@ from torch import Tensor
 
 from mfh.contracts import ActivationSite
 from mfh.errors import DataValidationError, FrozenArtifactError
-from mfh.experiments.e4_caa_mlx import verify_m2_caa_artifact
+from mfh.experiments.e4_caa_vllm import verify_m2_caa_artifact
 from mfh.inference.architecture import HookKey
 from mfh.methods.static import load_vector_bank
 from mfh.provenance import sha256_file, stable_hash
@@ -44,8 +45,8 @@ class ResolvedStaticDirection:
             or not math.isfinite(self.reference_rms)
             or self.reference_rms <= 0
             or self.source_kind not in {
-                "E3-M1-R-P0-native-MLX",
-                "E4-M2-CAA-native-MLX",
+                "E3-M1-R-P0-native-VLLM",
+                "E4-M2-CAA-native-VLLM",
             }
         ):
             raise DataValidationError("resolved static direction is invalid")
@@ -53,7 +54,7 @@ class ResolvedStaticDirection:
 
 
 def _direction(
-    value: np.ndarray, *, reference_rms: float, source_kind: str
+    value: np.ndarray[Any, Any], *, reference_rms: float, source_kind: str
 ) -> ResolvedStaticDirection:
     values = np.ascontiguousarray(value, dtype=np.float32)
     tensor = torch.from_numpy(values.copy()).contiguous()
@@ -134,7 +135,7 @@ def _resolve_e3_m1(
     return _direction(
         directions[index],
         reference_rms=float(reference_rms[index]),
-        source_kind="E3-M1-R-P0-native-MLX",
+        source_kind="E3-M1-R-P0-native-VLLM",
     )
 
 
@@ -173,7 +174,7 @@ def _resolve_m2(
     return _direction(
         direction.detach().cpu().float().numpy(),
         reference_rms=reference_rms,
-        source_kind="E4-M2-CAA-native-MLX",
+        source_kind="E4-M2-CAA-native-VLLM",
     )
 
 

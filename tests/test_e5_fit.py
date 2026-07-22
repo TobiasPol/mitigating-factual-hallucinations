@@ -45,8 +45,8 @@ from mfh.experiments.e5_native import (
 )
 from mfh.experiments.static_direction_sources import resolve_static_direction
 from mfh.inference.architecture import HookKey
-from mfh.inference.mlx_research import MlxPromptFeatureCubeOutput
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_research import VllmPromptFeatureCubeOutput
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.methods.adaptive import load_adaptive_controller
 from mfh.methods.features import ActivationFeatureSchema, FeatureComposition
 from mfh.methods.probes import (
@@ -164,7 +164,7 @@ def _inputs(
         "protocol": protocol.to_dict(),
         "recipe": recipe.to_dict(),
         "runtime_identity": {
-            "model_repository": "mlx-community/test",
+            "model_repository": "vllm-community/test",
             "model_revision": "c" * 40,
             "model_quantization": "4bit",
             "model_num_layers": 64,
@@ -475,11 +475,11 @@ class _NativeRuntime:
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         del metadata
         text = f"{prompt.text}|{question}"
         tokens = (10, 20)
-        return MlxRenderedPrompt(
+        return VllmRenderedPrompt(
             text=text,
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             token_ids=tokens,
@@ -489,13 +489,13 @@ class _NativeRuntime:
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput:
+    ) -> VllmPromptFeatureCubeOutput:
         del rendered
-        return MlxPromptFeatureCubeOutput(
+        return VllmPromptFeatureCubeOutput(
             activations={
                 site: {layer: np.array([[1.0, -1.0]], dtype=np.float32) for layer in layers}
                 for site in sites
@@ -525,11 +525,11 @@ class _NativeRuntime:
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[tuple[int, ActivationSite], Any],
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         del max_new_tokens
         output_tokens = (101, 102)
         for raw_state in intervention_states.values():
@@ -545,7 +545,7 @@ class _NativeRuntime:
                 state.applied_pre_history.append(before)
                 state.applied_post_history.append(before + state.direction * state.alpha)
             state.applications = applications
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=output_tokens,
             text="answer-0",
@@ -669,7 +669,7 @@ def test_e5_native_ablation_resumes_verifies_and_finalizes(
         json.dumps(policy.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     identity = {
-        "model_repository": "mlx-community/test",
+        "model_repository": "vllm-community/test",
         "model_revision": "c" * 40,
         "model_quantization": "4bit",
         "model_num_layers": 64,
@@ -687,9 +687,9 @@ def test_e5_native_ablation_resumes_verifies_and_finalizes(
     }
     work = tmp_path / "native-run"
     wrong_recipe = E5FitRecipe(
-        fixed_best_layer=16,
-        two_layer_candidates=(16, 31),
-        three_layer_candidates=(16, 31, 32),
+        fixed_best_layer=47,
+        two_layer_candidates=(47, 48),
+        three_layer_candidates=(47, 48, 57),
         intervention_site=ActivationSite.POST_MLP,
         minimum_class_count=2,
         router_epochs=10,

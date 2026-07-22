@@ -12,11 +12,11 @@
     "allow_model_fallbacks": false,
     "require_parameter_support": true,
     "catalog_endpoint": "https://openrouter.ai/api/v1/models",
-    "catalog_observed_on": "2026-07-17",
-    "catalog_artifact": "artifacts/graders/openrouter/catalog-2026-07-17.json",
-    "catalog_response_sha256": "3dbeb1f9a71faed5435d6c1ce3f4ae6a0b388cd911b0d1ac7e6b845d930b2045"
+    "catalog_observed_on": "2026-07-22",
+    "catalog_artifact": "artifacts/graders/openrouter/catalog-2026-07-22.json",
+    "catalog_response_sha256": "8c0fc0a422d3fbbb8818e93a0fb7e8b868ba7c77e976eaa3e5f7c9f715e0f3df"
   },
-  "adapter_semantic_digest": "01edc3c06120b4bf772589f87b60576aaff981e8d59a9a33a6fe0c1ca4c3ec8b",
+  "adapter_semantic_digest": "84c1e23927554f8cc7579d0c1216e01900d52f2b5f3aa0478bfe2a19d214fa0c",
   "graders": {
     "simpleqa_verified": {
       "requested_model": "openai/gpt-4.1",
@@ -43,5 +43,5 @@
     }
   },
   "reporting_requirement": "Label all AA automated outcomes as stable-Gemini-2.5-Flash rubric grades and do not claim exact grader-checkpoint comparability with the released preview-based implementation. Describe SimpleQA outcomes as released-rubric GPT-4.1 grades under the study's fail-closed OpenRouter adapter, not exact execution of the pinned starter notebook.",
-  "amendment_digest": "c2296baa709740ef11c78656f9b58033a7c9f5c764d5594b0ec0a4702ddff3aa"
+  "amendment_digest": "3c8bb042d1d566650b39b10f23d368b4cf344f83c03157f999e6248ac99be555"
 }

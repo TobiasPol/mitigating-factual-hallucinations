@@ -8,10 +8,12 @@ from mfh.contracts import Question
 from mfh.data.io import write_questions
 from mfh.data.splits import semantic_group_ids
 from mfh.errors import DataValidationError, FrozenArtifactError
+from mfh.experiments import e5_controller_splits as splits_module
 from mfh.experiments.e5_controller_splits import (
     verify_e5_controller_splits,
     write_e5_controller_splits,
 )
+from mfh.provenance import sha256_file
 
 
 def _questions(count: int = 5_000) -> tuple[Question, ...]:
@@ -27,14 +29,37 @@ def _questions(count: int = 5_000) -> tuple[Question, ...]:
     )
 
 
-def test_e5_controller_splits_materialize_exact_e2_partition(tmp_path: Path) -> None:
+def _reviewed_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, count: int = 5_000
+) -> Path:
     source = (
-        Path(__file__).parents[1]
-        / "artifacts/splits/triviaqa-reviewed/T-controller.jsonl"
+        tmp_path
+        / "artifacts/studies/qwen36-27b-nvfp4-a10040-v1/frozen/reviewed-splits/T-controller.jsonl"
     )
+    source.parent.mkdir(parents=True)
+    write_questions(source, _questions(count))
+    (source.parent / "manifest.json").write_text("{}\n", encoding="utf-8")
+    digest = "a" * 64
+    monkeypatch.setattr(splits_module, "_PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        splits_module,
+        "validate_reviewed_split_snapshot",
+        lambda _path: {
+            "manifest_digest": digest,
+            "artifacts": {"T-controller.jsonl": {"sha256": sha256_file(source)}},
+        },
+    )
+    return source
+
+
+def test_e5_controller_splits_materialize_exact_e2_partition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _reviewed_source(tmp_path, monkeypatch)
     verified = write_e5_controller_splits(
         tmp_path / "splits",
         source_questions=source,
+        expected_reviewed_split_manifest_digest="a" * 64,
     )
     assert len(verified.train_questions) == 4_000
     assert len(verified.calibration_questions) == 1_000
@@ -62,11 +87,17 @@ def test_e5_controller_splits_materialize_exact_e2_partition(tmp_path: Path) -> 
             verified.directory,
             source_questions=source,
             expected_manifest_digest=verified.manifest_digest,
+            expected_reviewed_split_manifest_digest="a" * 64,
         )
 
 
-def test_e5_controller_splits_require_exact_source_count(tmp_path: Path) -> None:
-    source = tmp_path / "T-controller.jsonl"
-    write_questions(source, _questions(4_999))
-    with pytest.raises(DataValidationError, match=r"reviewed.*inventory"):
-        write_e5_controller_splits(tmp_path / "splits", source_questions=source)
+def test_e5_controller_splits_require_exact_source_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _reviewed_source(tmp_path, monkeypatch, count=4_999)
+    with pytest.raises(DataValidationError, match=r"exact 5,000-row"):
+        write_e5_controller_splits(
+            tmp_path / "splits",
+            source_questions=source,
+            expected_reviewed_split_manifest_digest="a" * 64,
+        )

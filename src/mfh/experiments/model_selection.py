@@ -1,4 +1,4 @@
-"""Strict validation for the approved Qwen 3.6 / M4 Max study amendment."""
+"""Strict validation for the approved Qwen 3.6 / A100 study amendment."""
 
 from __future__ import annotations
 
@@ -19,25 +19,25 @@ from mfh.artifact_namespace import (
 from mfh.config import load_model_spec
 from mfh.contracts import Runtime
 from mfh.errors import ConfigurationError
-from mfh.inference.mlx_preflight import load_mlx_runtime_policy
 from mfh.inference.transformers_snapshot import load_snapshot_manifest
+from mfh.inference.vllm_preflight import load_vllm_runtime_policy
 from mfh.provenance import sha256_file, stable_hash
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_ACTIVE_NAME = "qwen3.6-27b-mlx-4bit"
+_ACTIVE_NAME = "qwen3.6-27b-nvfp4"
 ACTIVE_MODEL_NAME = _ACTIVE_NAME
 APPROVED_AMENDMENT_DIGEST = (
-    "fc26c55c864156a296d030dcd4624885f21d933075979a1891985cf6f252a7a7"
+    "8eae69a6fa1435ceb7a67b238d8f42772d782fad60e94adf01d1d69f6a1563c7"
 )
-ACTIVE_RUNTIME_POLICY_RELATIVE = "configs/runtimes/qwen3.6-27b-mlx-4bit-policy.json"
+ACTIVE_RUNTIME_POLICY_RELATIVE = "configs/runtimes/qwen3.6-27b-nvfp4-policy.json"
 ACTIVE_MODEL_IDENTITIES: Mapping[str, Mapping[str, Any]] = MappingProxyType(
     {
         _ACTIVE_NAME: MappingProxyType(
             {
-                "repository": "mlx-community/Qwen3.6-27B-4bit",
-                "revision": "c000ac2c2057d94be3fa931000c31723aac53282",
-                "runtime": Runtime.MLX,
-                "quantization": "affine-g64-mlx-4bit",
+                "repository": "nvidia/Qwen3.6-27B-NVFP4",
+                "revision": "0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+                "runtime": Runtime.VLLM,
+                "quantization": "modelopt-mixed-nvfp4-fp8",
                 "num_layers": 64,
             }
         )
@@ -68,7 +68,7 @@ _ROOT_FIELDS = {
     "hardware_envelope",
     "study_namespace",
     "active_models",
-    "preserved_model_independent_evidence",
+    "model_independent_evidence_policy",
     "required_effect",
     "amendment_digest",
 }
@@ -89,30 +89,24 @@ _ACTIVE_FIELDS = {
     "runtime_policy_digest",
 }
 _HARDWARE = {
-    "chip": "Apple M4 Max",
-    "unified_memory_bytes": 51_539_607_552,
-    "architecture": "arm64",
-    "accelerator": "Apple Metal",
+    "gpu_model": "NVIDIA A100-SXM4-40GB",
+    "minimum_vram_bytes": 40_000_000_000,
+    "architecture": "x86_64",
+    "accelerator": "NVIDIA CUDA (SM80)",
 }
-_PRESERVED_EVIDENCE = {
-    "runtime_validation_cohort_manifest_digest": (
-        "bb89b2da16d899f8a38c0b090f84d1e43ffd1132e0fe0693295230b804f44442"
-    ),
-    "contamination_manifest_digest": (
-        "ae79350a5e2f6310fccec4b91e9ef55821996f1797baacb21fb7de3d7b6131f2"
-    ),
-    "manual_review_manifest_digest": (
-        "02f12825cb2b362b0bbbdde378f2018c15a0859d262bcbf3df2fb4ac9bfd02d6"
-    ),
+_MODEL_INDEPENDENT_EVIDENCE_POLICY = {
+    "runtime_validation_cohort": "regenerate-under-active-study-namespace",
+    "contamination_review": "regenerate-from-pinned-source-snapshots",
+    "manual_review": "new-human-review-required-before-e0-completion",
 }
 _REQUIRED_EFFECT = {
     "e0": (
-        "rerun-qwen-runtime-validation-and-complete-a-new-e0-ledger-in-the-qwen-study-namespace"
+        "regenerate-model-independent-inputs-and-complete-a-new-qwen-e0-ledger-in-the-qwen-study-namespace"
     ),
     "e1_through_e10": (
-        "run-only-the-sole-active-qwen-mlx-model-in-the-qwen-study-namespace"
+        "run-only-the-sole-active-qwen-vllm-model-in-the-qwen-study-namespace"
     ),
-    "runtime_preflight": "require-a-live-passed-m4-max-receipt-before-qwen-e0",
+    "runtime_preflight": "require-a-live-passed-a100-sm80-receipt-before-qwen-e0",
     "colab": "retired",
 }
 
@@ -151,7 +145,7 @@ def _project_path(reference: object, *, root: Path, context: str) -> Path:
 
 
 def validate_active_model_spec(model: Any) -> None:
-    """Reject drift from the sole approved Qwen MLX declaration."""
+    """Reject drift from the sole approved Qwen VLLM declaration."""
 
     name = getattr(model, "name", None)
     if name != _ACTIVE_NAME:
@@ -210,7 +204,7 @@ def _validate_active_model(
     policy_path = _project_path(
         row.get("runtime_policy"), root=project_root, context="runtime policy"
     )
-    policy = load_mlx_runtime_policy(policy_path)
+    policy = load_vllm_runtime_policy(policy_path)
     if (
         sha256_file(policy_path) != row.get("runtime_policy_sha256")
         or policy.get("policy_digest") != row.get("runtime_policy_digest")
@@ -229,8 +223,8 @@ def load_model_selection_amendment(
 
     source = Path(path).absolute()
     raw = _load_json(source, context="model-selection amendment")
-    if set(raw) != _ROOT_FIELDS or raw.get("schema_version") != 3:
-        raise ConfigurationError("model-selection amendment fields differ from schema version 3")
+    if set(raw) != _ROOT_FIELDS or raw.get("schema_version") != 4:
+        raise ConfigurationError("model-selection amendment fields differ from schema version 4")
     declared = _sha256(raw.get("amendment_digest"), "amendment_digest")
     body = dict(raw)
     body.pop("amendment_digest")
@@ -240,8 +234,8 @@ def load_model_selection_amendment(
         raise ConfigurationError("model-selection amendment is not the approved amendment")
     if (
         raw.get("approval")
-        != "explicit-user-instruction-qwen3.6-27b-m4-max-48gb-apple-mlx"
-        or raw.get("approved_on") != "2026-07-17"
+        != "explicit-user-instruction-qwen3.6-27b-nvfp4-a100-40gb-vllm-fresh-run"
+        or raw.get("approved_on") != "2026-07-22"
         or dict(_mapping(raw.get("hardware_envelope"), "hardware envelope"))
         != _HARDWARE
     ):
@@ -259,16 +253,16 @@ def load_model_selection_amendment(
     _validate_active_model(
         raw, model_directory=model_directory, project_root=project_root
     )
-    preserved = dict(
+    evidence_policy = dict(
         _mapping(
-            raw.get("preserved_model_independent_evidence"),
-            "preserved model-independent evidence",
+            raw.get("model_independent_evidence_policy"),
+            "model-independent evidence policy",
         )
     )
-    if preserved != _PRESERVED_EVIDENCE:
-        raise ConfigurationError("preserved evidence differs from the approved amendment")
-    for key, value in preserved.items():
-        _sha256(value, f"preserved evidence {key}")
+    if evidence_policy != _MODEL_INDEPENDENT_EVIDENCE_POLICY:
+        raise ConfigurationError(
+            "model-independent evidence policy differs from the approved amendment"
+        )
     if dict(_mapping(raw.get("required_effect"), "required effect")) != _REQUIRED_EFFECT:
         raise ConfigurationError("required amendment effect differs from approved policy")
     return {**raw, "amendment_digest": declared}

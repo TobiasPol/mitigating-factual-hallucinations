@@ -1,4 +1,4 @@
-"""Resumable native-MLX generation and grading workflow for E1."""
+"""Resumable native-VLLM generation and grading workflow for E1."""
 
 from __future__ import annotations
 
@@ -62,9 +62,9 @@ from mfh.experiments.runner import (
     PhaseRunLedger,
     expand_factorial_conditions,
 )
-from mfh.inference.mlx_preflight import validate_mlx_preflight_receipt
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt, MlxRuntime
 from mfh.inference.transformers_snapshot import verify_transformers_snapshot
+from mfh.inference.vllm_preflight import validate_vllm_preflight_receipt
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt, VllmRuntime
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
 
 _PROMPTS = ("P0-neutral", "P1-direct", "P2-calibrated-abstention")
@@ -85,8 +85,7 @@ _WORK_FILES = frozenset(
         "grading-sessions.jsonl",
     }
 )
-_MODEL_CLASS = "mlx_lm.models.qwen3_5.Model"
-_TOKENIZER_CLASS = "mlx_lm.tokenizer_utils.TokenizerWrapper"
+_MODEL_CLASS = "vllm.model_executor.models.qwen3_5.Qwen3_5ForConditionalGeneration"
 _OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 _SHA256 = frozenset("0123456789abcdef")
 _ATTEMPT_RECEIPT_KEYS = OPENROUTER_ATTEMPT_RECEIPT_FIELDS
@@ -99,11 +98,11 @@ class _Runtime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def generate(
-        self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-    ) -> MlxGenerationOutput: ...
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput: ...
 
     def runtime_identity(self) -> Mapping[str, Any]: ...
 
@@ -248,7 +247,7 @@ def _validate_runtime_identity(prepared: E1Prepared, runtime_identity: Mapping[s
     model = receipt.get("model")
     expected = receipt.get("runtime_identity")
     if not isinstance(model, Mapping) or not isinstance(expected, Mapping):
-        raise DataValidationError("MLX runtime receipt lacks a required identity section")
+        raise DataValidationError("VLLM runtime receipt lacks a required identity section")
     if (
         dict(runtime_identity) != dict(expected)
         or model.get("name") != prepared.model.name
@@ -258,9 +257,9 @@ def _validate_runtime_identity(prepared: E1Prepared, runtime_identity: Mapping[s
         or model.get("num_layers") != prepared.model.num_layers
         or model.get("snapshot_identity") != prepared.snapshot_identity
         or expected.get("model_class") != _MODEL_CLASS
-        or expected.get("tokenizer_class") != _TOKENIZER_CLASS
+        or not isinstance(expected.get("tokenizer_class"), str)
     ):
-        raise DataValidationError("live E1 MLX identity differs from the frozen runtime receipt")
+        raise DataValidationError("live E1 VLLM identity differs from the frozen runtime receipt")
 
 
 def _prepare(
@@ -287,11 +286,11 @@ def _prepare(
     )
     model = load_model_spec(model_config)
     validate_active_model_spec(model)
-    if model.runtime is not Runtime.MLX:
-        raise ConfigurationError("E1 native runner requires the sole MLX model")
+    if model.runtime is not Runtime.VLLM:
+        raise ConfigurationError("E1 native runner requires the sole VLLM model")
     snapshot_identity = verify_transformers_snapshot(model, snapshot_directory, snapshot_manifest)
     project_root = study_config.absolute().parents[2]
-    receipt = validate_mlx_preflight_receipt(
+    receipt = validate_vllm_preflight_receipt(
         runtime_config,
         project_root=project_root,
         model_config=model_config,
@@ -366,7 +365,7 @@ def _prepare(
     plan_body: dict[str, Any] = {
         "schema_version": 1,
         "phase": "E1",
-        "runner": "native-mlx-then-openrouter",
+        "runner": "native-vllm-then-openrouter",
         "runner_source_sha256": sha256_file(Path(__file__)),
         "study_protocol_digest": study.digest,
         "contract_digest": contract.digest,
@@ -425,7 +424,7 @@ def _prepare(
     )
 
 
-def prepare_e1_mlx(
+def prepare_e1_vllm(
     *,
     splits_directory: str | Path,
     expected_splits_manifest_digest: str,
@@ -512,7 +511,7 @@ def _generation_request_digest(
     prepared: E1Prepared,
     condition: EvaluationCondition,
     question: Question,
-    rendered: MlxRenderedPrompt,
+    rendered: VllmRenderedPrompt,
 ) -> str:
     return stable_hash(
         {
@@ -536,8 +535,8 @@ def _generation_body(
     prepared: E1Prepared,
     condition: EvaluationCondition,
     question: Question,
-    rendered: MlxRenderedPrompt,
-    generation: MlxGenerationOutput,
+    rendered: VllmRenderedPrompt,
+    generation: VllmGenerationOutput,
     previous_digest: str | None,
 ) -> dict[str, Any]:
     return {
@@ -778,7 +777,7 @@ def _emit_checkpoint(
     digest = _resume_checkpoint(prepared, records, sessions)
     payload = {
         "schema_version": 1,
-        "event": "e1-mlx-resume-checkpoint",
+        "event": "e1-vllm-resume-checkpoint",
         "reason": reason,
         "plan_identity": prepared.plan["plan_identity"],
         "records_completed": len(records),
@@ -791,7 +790,7 @@ def _emit_checkpoint(
     return digest
 
 
-def run_e1_mlx_generations(
+def run_e1_vllm_generations(
     *,
     splits_directory: str | Path,
     expected_splits_manifest_digest: str,
@@ -819,7 +818,7 @@ def run_e1_mlx_generations(
         or not isinstance(request_budget, int)
         or request_budget <= 0
     ):
-        raise ConfigurationError("E1 MLX request budget must be a positive integer")
+        raise ConfigurationError("E1 VLLM request budget must be a positive integer")
     if expected_resume_checkpoint is not None and (
         not isinstance(expected_resume_checkpoint, str)
         or len(expected_resume_checkpoint) != 64
@@ -880,7 +879,7 @@ def run_e1_mlx_generations(
             else "an E1 resume checkpoint cannot initialize generation"
         )
     factory = runtime_factory or (
-        lambda model, snapshot: MlxRuntime.from_spec(model, snapshot_path=snapshot, seed=17)
+        lambda model, snapshot: VllmRuntime.from_spec(model, snapshot_path=snapshot, seed=17)
     )
     runtime: _Runtime | None = None
     records: list[dict[str, Any]] = []
@@ -908,7 +907,9 @@ def run_e1_mlx_generations(
         if has_execution:
             expected = str(expected_resume_checkpoint)
             if not _resume_checkpoint_matches(prepared, records, sessions, expected):
-                raise DataValidationError("E1 MLX resume checkpoint differs from the external head")
+                raise DataValidationError(
+                    "E1 VLLM resume checkpoint differs from the external head"
+                )
             if _resume_checkpoint(prepared, records, sessions) != expected:
                 _emit_checkpoint(
                     prepared,
@@ -999,7 +1000,7 @@ def run_e1_mlx_generations(
                 print(
                     json.dumps(
                         {
-                            "event": "e1-mlx-progress",
+                            "event": "e1-vllm-progress",
                             "records_completed": len(records),
                             "records_expected": _GENERATION_COUNT,
                             "benchmark": condition.benchmark,
@@ -1082,13 +1083,14 @@ def run_e1_mlx_generations(
 
 def _tokenizer_renderer(prepared: E1Prepared) -> _Runtime:
     try:
-        from mlx_lm.tokenizer_utils import load as load_tokenizer
-    except ImportError as exc:  # pragma: no cover - non-Apple verification host
-        raise ConfigurationError("E1 verification requires mlx-lm") from exc
-    tokenizer = load_tokenizer(prepared.snapshot)
-    fake_model = type("Model", (), {"layers": [None] * prepared.model.num_layers})()
-    runtime = MlxRuntime(
-        model=fake_model,
+        from transformers import AutoTokenizer
+    except ImportError as exc:  # pragma: no cover - optional verification dependency
+        raise ConfigurationError("E1 verification requires transformers") from exc
+    tokenizer = AutoTokenizer.from_pretrained(
+        str(prepared.snapshot), local_files_only=True, trust_remote_code=False
+    )
+    runtime = VllmRuntime(
+        engine=None,
         tokenizer=tokenizer,
         model_spec=prepared.model,
         snapshot=prepared.snapshot,
@@ -1102,12 +1104,12 @@ def _tokenizer_renderer(prepared: E1Prepared) -> _Runtime:
             question: str,
             *,
             metadata: Mapping[str, Any] | None = None,
-        ) -> MlxRenderedPrompt:
+        ) -> VllmRenderedPrompt:
             return runtime.render_prompt(prompt, question, metadata=metadata)
 
         def generate(
-            self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-        ) -> MlxGenerationOutput:
+            self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+        ) -> VllmGenerationOutput:
             raise AssertionError("tokenizer-only E1 verifier cannot generate")
 
         def runtime_identity(self) -> Mapping[str, Any]:
@@ -2421,7 +2423,7 @@ def verify_e1_output_bundle(
     return manifest
 
 
-def finalize_e1_mlx(
+def finalize_e1_vllm(
     *,
     splits_directory: str | Path,
     expected_splits_manifest_digest: str,

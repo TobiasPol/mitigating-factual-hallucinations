@@ -17,6 +17,13 @@ from mfh.provenance import sha256_file, stable_hash
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _require_external_grader_sources() -> None:
+    absent = [path for path in grader_bundle_sources().values() if not path.is_file()]
+    if absent:
+        pytest.skip("external frozen grader sources are not present in this checkout")
+
+
 def test_e1_grader_bundle_freezes_and_replays_every_live_input(tmp_path: Path) -> None:
     output = tmp_path / "graders"
     created = write_e1_grader_bundle(output)
@@ -27,7 +34,7 @@ def test_e1_grader_bundle_freezes_and_replays_every_live_input(tmp_path: Path) -
 
     assert manifest["bundle_kind"] == "e1-official-graders-openrouter"
     assert manifest["catalog_sha256"] == (
-        "3dbeb1f9a71faed5435d6c1ce3f4ae6a0b388cd911b0d1ac7e6b845d930b2045"
+        "8c0fc0a422d3fbbb8818e93a0fb7e8b868ba7c77e976eaa3e5f7c9f715e0f3df"
     )
     assert set(manifest["grader_fingerprints"]) == {
         "simpleqa_verified",

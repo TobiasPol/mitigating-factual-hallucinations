@@ -1,4 +1,4 @@
-"""Resumable native-MLX operator lifecycle for the registered E8 study."""
+"""Resumable native-VLLM operator lifecycle for the registered E8 study."""
 
 from __future__ import annotations
 
@@ -79,8 +79,8 @@ from mfh.experiments.runner import (
     validate_side_effect_evaluation_bundle,
     write_side_effect_evaluation_bundle,
 )
-from mfh.inference.mlx_research import MlxResearchRuntime
 from mfh.inference.transformers_snapshot import verify_transformers_snapshot
+from mfh.inference.vllm_research import VllmResearchRuntime
 from mfh.methods.adaptive import load_adaptive_controller
 from mfh.methods.features import (
     ActivationFeatureSchema,
@@ -317,7 +317,7 @@ class E8Runbook:
 
 
 def write_e8_runbook_template(path: str | Path, *, m1_layer: int) -> str:
-    """Write the secret-free E8 runbook for an Apple-MLX 48-GiB host."""
+    """Write the secret-free E8 runbook for the single-A100 vLLM host."""
 
     if isinstance(m1_layer, bool) or not isinstance(m1_layer, int) or not 0 <= m1_layer < 64:
         raise DataValidationError("E8 M1 layer must be an explicit Qwen layer index")
@@ -330,13 +330,13 @@ def write_e8_runbook_template(path: str | Path, *, m1_layer: int) -> str:
         "study_protocol": "../../../../configs/experiments/phases.yaml",
         "analysis_protocol": "../../../../configs/analysis/confirmatory.yaml",
         "research_plan": "../../../../docs/research-plan.md",
-        "model_config": "../../../../configs/models/qwen3.6-27b-mlx-4bit.yaml",
+        "model_config": "../../../../configs/models/qwen3.6-27b-nvfp4.yaml",
         "prompt_config": "../../../../configs/prompts/primary.yaml",
         "snapshot_directory": (
-            "../../../models/qwen3.6-27b-mlx-4bit/"
-            "c000ac2c2057d94be3fa931000c31723aac53282"
+            "../../../models/qwen3.6-27b-nvfp4/"
+            "0893e1606ff3d5f97a441f405d5fc541a6bdf404"
         ),
-        "snapshot_manifest": "../../../../configs/models/qwen3.6-27b-mlx-4bit.snapshot.json",
+        "snapshot_manifest": "../../../../configs/models/qwen3.6-27b-nvfp4.snapshot.json",
         "environment_file": "../../../../.env",
         "execution_key_file": "../secrets/execution-private-key.hex",
         "runtime_artifact": (
@@ -657,7 +657,7 @@ def prepare_e8_runbook(runbook: E8Runbook) -> Mapping[str, Any]:
 
 
 def preflight_e8_runbook(runbook: E8Runbook) -> Mapping[str, Any]:
-    """Replay every immutable E8 source without loading MLX or writing outputs."""
+    """Replay every immutable E8 source without loading VLLM or writing outputs."""
 
     context = _base_context(runbook)
     if runbook.outputs["development_side_effect_bundle"].exists():
@@ -683,11 +683,11 @@ def preflight_e8_runbook(runbook: E8Runbook) -> Mapping[str, Any]:
 
 def _native_runtime(
     runbook: E8Runbook, context: _E8Context
-) -> tuple[MlxResearchRuntime, E6RuntimeAttestor]:
+) -> tuple[VllmResearchRuntime, E6RuntimeAttestor]:
     provenance = context.runtime_identity.get("research_provenance")
     if not isinstance(provenance, Mapping):
         raise FrozenArtifactError("E6 runtime attestation lacks research provenance")
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         context.model,
         snapshot_path=runbook.snapshot_directory,
         seed=runbook.seed,
@@ -988,7 +988,7 @@ def execute_e8_activation_capture(
     budget = expected if limit is None else limit
     if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
         raise DataValidationError("E8 activation limit must be positive")
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     processed = 0
     completed = 0
@@ -1255,7 +1255,7 @@ def _fixed_row(
     *,
     runbook: E8Runbook,
     context: _E8Context,
-    runtime: MlxResearchRuntime,
+    runtime: VllmResearchRuntime,
     attestor: E6RuntimeAttestor,
     grader: E7E8DevelopmentGrader,
     question: Question,
@@ -1451,7 +1451,7 @@ def execute_e8_variant_screen(runbook: E8Runbook, *, limit: int | None = None) -
     budget = expected if limit is None else limit
     if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
         raise DataValidationError("E8 variant screen limit must be positive")
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     grader: E7E8DevelopmentGrader | None = None
     processed = 0
@@ -1960,7 +1960,7 @@ def execute_e8_candidate_screen(
     budget = expected if limit is None else limit
     if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
         raise DataValidationError("E8 candidate screen limit must be positive")
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     grader: E7E8DevelopmentGrader | None = None
     controller_schema_prompt = context.prompts[
@@ -2329,7 +2329,7 @@ def execute_e8_final(runbook: E8Runbook, *, limit: int | None = None) -> Mapping
     controller_prompt = context.prompts[
         load_adaptive_controller(components.controller_path).risk_probe.training_schema.prompt_id
     ]
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     grader: E7E8DevelopmentGrader | None = None
     processed = 0
@@ -2686,7 +2686,7 @@ def _verify_e8_intermediate_stages(
 
 
 def verify_e8_runbook(runbook: E8Runbook) -> Mapping[str, Any]:
-    """Replay available E8 stages and terminal package without loading MLX."""
+    """Replay available E8 stages and terminal package without loading VLLM."""
 
     context = _base_context(runbook)
     stages: dict[str, Any] = {

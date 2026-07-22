@@ -2197,7 +2197,7 @@ class SAEInterpretabilityAudit:
 @dataclass(frozen=True, slots=True)
 class LongComputationReceipt:
     wall_time_seconds: float
-    peak_unified_memory_bytes: int
+    peak_gpu_memory_bytes: int
     package_lock_sha256: str
     model_snapshot_sha256: str
     resumable_chain_head: str
@@ -2212,8 +2212,8 @@ class LongComputationReceipt:
         if (
             not math.isfinite(self.wall_time_seconds)
             or self.wall_time_seconds <= 0
-            or type(self.peak_unified_memory_bytes) is not int
-            or self.peak_unified_memory_bytes <= 0
+            or type(self.peak_gpu_memory_bytes) is not int
+            or self.peak_gpu_memory_bytes <= 0
             or any(
                 not _SHA256.fullmatch(value)
                 for value in (
@@ -2255,7 +2255,7 @@ def long_computation_receipt_body(
     return {
         "receipt_kind": "e7-long-computation-v2",
         "wall_time_seconds": receipt.wall_time_seconds,
-        "peak_unified_memory_bytes": receipt.peak_unified_memory_bytes,
+        "peak_gpu_memory_bytes": receipt.peak_gpu_memory_bytes,
         "package_lock_sha256": receipt.package_lock_sha256,
         "model_snapshot_sha256": receipt.model_snapshot_sha256,
         "resumable_chain_head": receipt.resumable_chain_head,
@@ -2270,7 +2270,7 @@ def long_computation_receipt_body(
 def _create_long_computation_receipt(
     *,
     wall_time_seconds: float,
-    peak_unified_memory_bytes: int,
+    peak_gpu_memory_bytes: int,
     package_lock_sha256: str,
     model_snapshot_sha256: str,
     resumable_chain_head: str,
@@ -2283,7 +2283,7 @@ def _create_long_computation_receipt(
 ) -> LongComputationReceipt:
     values: dict[str, Any] = {
         "wall_time_seconds": wall_time_seconds,
-        "peak_unified_memory_bytes": peak_unified_memory_bytes,
+        "peak_gpu_memory_bytes": peak_gpu_memory_bytes,
         "package_lock_sha256": package_lock_sha256,
         "model_snapshot_sha256": model_snapshot_sha256,
         "resumable_chain_head": resumable_chain_head,
@@ -2689,7 +2689,7 @@ def fit_e7_sae_sweep_measured(
         measurement_method = "resource.getrusage:RUSAGE_SELF:posix-kib"
     receipt = _create_long_computation_receipt(
         wall_time_seconds=wall_time,
-        peak_unified_memory_bytes=peak_bytes,
+        peak_gpu_memory_bytes=peak_bytes,
         package_lock_sha256=lock_sha,
         model_snapshot_sha256=model_snapshot_sha256,
         resumable_chain_head=e7_resumable_chain_head(
@@ -3605,7 +3605,7 @@ def _verify_activation_capture_receipt(
 
 
 def _write_memmap(path: Path, values: NDArray[np.generic]) -> None:
-    mapped = np.lib.format.open_memmap(
+    mapped = np.lib.format.open_memmap(  # type: ignore[no-untyped-call]
         path, mode="w+", dtype=values.dtype, shape=values.shape
     )
     mapped[...] = values

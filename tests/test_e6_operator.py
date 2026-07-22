@@ -34,7 +34,7 @@ from mfh.experiments.e6_operator import (
 )
 from mfh.experiments.protocol import ExperimentPhase, load_study_protocol
 from mfh.inference.architecture import HookKey
-from mfh.inference.mlx_research import MlxResearchInterventionState
+from mfh.inference.vllm_research import VllmResearchInterventionState
 from mfh.provenance import sha256_file
 
 
@@ -42,7 +42,12 @@ def test_e6_runbook_template_round_trips_without_embedding_secrets(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "operator-inputs" / "E6-runbook.json"
-    fingerprint = write_e6_runbook_template(path, m1_layer=47)
+    fingerprint = write_e6_runbook_template(
+        path,
+        m1_layer=47,
+        official_grader_bundle=tmp_path / "frozen" / "E1-graders",
+        expected_grader_manifest_digest="a" * 64,
+    )
     value = json.loads(path.read_text(encoding="utf-8"))
     runbook = E6Runbook.load(path)
 
@@ -62,7 +67,15 @@ def test_e6_runbook_template_round_trips_without_embedding_secrets(
 def test_e6_cli_wires_the_complete_operator_lifecycle() -> None:
     parser = build_parser()
     commands = {
-        "write-e6-runbook": ["runbook.json", "--m1-layer", "31"],
+        "write-e6-runbook": [
+            "runbook.json",
+            "--m1-layer",
+            "31",
+            "--official-grader-bundle",
+            "graders",
+            "--expected-grader-manifest-digest",
+            "a" * 64,
+        ],
         "freeze-e6-questions": [
             "questions",
             "reviewed",
@@ -219,7 +232,7 @@ def test_question_bundle_membership_allows_only_registered_partition_relabel(
 
 def test_e6_conditions_bind_raw_m1_strength_and_cross_prompt_controller_source() -> None:
     study = load_study_protocol("configs/experiments/phases.yaml")
-    model = load_model_spec("configs/models/qwen3.6-27b-mlx-4bit.yaml")
+    model = load_model_spec("configs/models/qwen3.6-27b-nvfp4.yaml")
     prompt = {item.prompt_id: item for item in load_prompt_specs("configs/prompts/primary.yaml")}[
         "P3-forced-answer"
     ]
@@ -291,10 +304,10 @@ def test_e6_adaptive_teacher_forcing_reuses_generation_effective_magnitude() -> 
             standardized_alpha: float,
             reference_rms: float,
             token_scope: TokenScope,
-        ) -> MlxResearchInterventionState:
+        ) -> VllmResearchInterventionState:
             assert np.array_equal(direction, normalized)
             assert reference_rms == 1.0
-            return MlxResearchInterventionState(
+            return VllmResearchInterventionState(
                 direction=direction,
                 alpha=standardized_alpha,
                 token_scope=token_scope,
@@ -305,7 +318,7 @@ def test_e6_adaptive_teacher_forcing_reuses_generation_effective_magnitude() -> 
         benchmark="triviaqa",
         model_repository="model/repository",
         model_revision="0" * 40,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization="4bit",
         system_prompt_id="P0-neutral",
         rendered_prompt_hash="1" * 64,

@@ -127,7 +127,7 @@ def _seed(*values: str) -> int:
     return int.from_bytes(digest[:8], "big", signed=False)
 
 
-def _unit_direction(width: int, *, seed: int) -> np.ndarray:
+def _unit_direction(width: int, *, seed: int) -> np.ndarray[Any, Any]:
     values = np.random.Generator(np.random.PCG64(seed)).standard_normal(width)
     norm = float(np.linalg.norm(values))
     if not math.isfinite(norm) or norm <= 0:
@@ -144,7 +144,7 @@ def _direction(
     extraction: str,
     question_id: str,
     width: int,
-) -> np.ndarray:
+) -> np.ndarray[Any, Any]:
     return _unit_direction(
         width,
         seed=_seed(
@@ -209,7 +209,7 @@ def _write_arrays(
     width: int,
 ) -> tuple[str, str]:
     random_path = directory / "random_norm.npy"
-    random = np.lib.format.open_memmap(
+    random = np.lib.format.open_memmap(  # type: ignore[no-untyped-call]
         random_path, mode="w+", dtype=np.float32, shape=(len(_EXTRACTIONS), width)
     )
     for extraction_index, extraction in enumerate(_EXTRACTIONS):
@@ -225,7 +225,7 @@ def _write_arrays(
     random.flush()
     del random
     gaussian_path = directory / "gaussian.npy"
-    gaussian = np.lib.format.open_memmap(
+    gaussian = np.lib.format.open_memmap(  # type: ignore[no-untyped-call]
         gaussian_path,
         mode="w+",
         dtype=np.float32,
@@ -459,7 +459,7 @@ def load_e3_fixed_control_direction(
     question_id: str | None = None,
     expected_metadata_digest: str,
     dev_question_ids: Sequence[str],
-) -> np.ndarray:
+) -> np.ndarray[Any, Any]:
     """Load one immutable unit control direction from a verified bundle."""
 
     if extraction_method not in _EXTRACTIONS:
@@ -506,13 +506,13 @@ def load_e3_fixed_control_direction(
                     "E3 fixed-control array changed after verification"
                 )
             handle.seek(0)
-            version = np.lib.format.read_magic(handle)
+            version = np.lib.format.read_magic(handle)  # type: ignore[no-untyped-call]
             if version == (1, 0):
-                shape, fortran_order, dtype = np.lib.format.read_array_header_1_0(
+                shape, fortran_order, dtype = np.lib.format.read_array_header_1_0(  # type: ignore[no-untyped-call]
                     handle
                 )
             elif version in {(2, 0), (3, 0)}:
-                shape, fortran_order, dtype = np.lib.format.read_array_header_2_0(
+                shape, fortran_order, dtype = np.lib.format.read_array_header_2_0(  # type: ignore[no-untyped-call]
                     handle
                 )
             else:

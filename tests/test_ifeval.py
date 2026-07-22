@@ -39,12 +39,14 @@ class IFEvalIsolationTests(unittest.TestCase):
             stdout=(
                 '{"checks": [true], "passed": true, '
                 f'"python_version": "{ifeval_module._PYTHON_VERSION}", '
-                '"platform_system": "Darwin", '
-                '"platform_machine": "arm64"}\n'
+                f'"platform_system": "{ifeval_module._PLATFORM_SYSTEM}", '
+                f'"platform_machine": "{ifeval_module._PLATFORM_MACHINE}"}}\n'
             ),
             stderr="",
         )
-        with tempfile.TemporaryDirectory() as directory, patch(
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "mfh.evaluation.ifeval.os.environ", {"LD_PRELOAD": "attacker.so"}, clear=False
+        ), patch(
             "mfh.evaluation.ifeval.validate_ifeval_evaluator",
             return_value="a" * 64,
         ), patch(
@@ -80,6 +82,7 @@ class IFEvalIsolationTests(unittest.TestCase):
             run.call_args.kwargs["env"]["PYTHONDONTWRITEBYTECODE"], "1"
         )
         self.assertNotIn("VIRTUAL_ENV", run.call_args.kwargs["env"])
+        self.assertNotIn("LD_PRELOAD", run.call_args.kwargs["env"])
 
     def test_rejects_incomplete_isolated_checker_output(self) -> None:
         completed = subprocess.CompletedProcess(
@@ -88,7 +91,8 @@ class IFEvalIsolationTests(unittest.TestCase):
             stdout=(
                 '{"checks": [], "passed": true, '
                 f'"python_version": "{ifeval_module._PYTHON_VERSION}", '
-                '"platform_system": "Darwin", "platform_machine": "arm64"}\n'
+                f'"platform_system": "{ifeval_module._PLATFORM_SYSTEM}", '
+                f'"platform_machine": "{ifeval_module._PLATFORM_MACHINE}"}}\n'
             ),
             stderr="",
         )
@@ -151,12 +155,12 @@ class IFEvalIsolationTests(unittest.TestCase):
 
             def write_manifest(*, punkt_sha: str = frozen_punkt_sha) -> None:
                 body = {
-                    "schema_version": 7,
+                    "schema_version": 8,
                     "repository": ifeval_module._REPOSITORY,
                     "revision": ifeval_module._REVISION,
                     "license": "Apache-2.0",
                     "package": ifeval_module._PACKAGE,
-                    "runtime_platform": "macos-arm64",
+                    "runtime_platform": ifeval_module._RUNTIME_PLATFORM,
                     "uv_version": ifeval_module._UV_VERSION,
                     "uv_executable_sha256": ifeval_module._UV_EXECUTABLE_SHA256,
                     "python_version": ifeval_module._PYTHON_VERSION,

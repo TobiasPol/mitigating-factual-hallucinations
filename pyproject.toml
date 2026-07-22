@@ -29,16 +29,8 @@ research = [
   "torch>=2.5,<3",
   "transformers>=4.48,<6",
 ]
-mlx-macos = [
-  "mlx==0.31.2; sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "mlx-lm==0.31.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "numpy==2.4.2; sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "protobuf==7.34.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "safetensors==0.7.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "sentencepiece==0.2.1; sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "tokenizers==0.22.2; sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "torch==2.10.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "transformers==5.2.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+cuda-a100 = [
+  "vllm==0.24.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 dev = [
   "mypy>=1.14,<2",

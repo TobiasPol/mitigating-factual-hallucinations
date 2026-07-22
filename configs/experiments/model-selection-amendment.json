@@ -1,48 +1,48 @@
 {
-  "schema_version": 3,
-  "amendment_id": "m4max48-qwen36-single-mlx-model-2026-07-22",
-  "approved_on": "2026-07-17",
-  "approval": "explicit-user-instruction-qwen3.6-27b-m4-max-48gb-apple-mlx",
-  "reason": "Execute E0-E10 with one exactly pinned Qwen/Qwen3.6-27B deployment represented by its uniform 4-bit MLX conversion on the approved Apple M4 Max with 48 GiB unified memory.",
+  "schema_version": 4,
+  "amendment_id": "a10040-qwen36-27b-nvfp4-vllm-fresh-2026-07-22",
+  "approved_on": "2026-07-22",
+  "approval": "explicit-user-instruction-qwen3.6-27b-nvfp4-a100-40gb-vllm-fresh-run",
+  "reason": "Execute E0-E10 from fresh inputs with the single exactly pinned NVIDIA ModelOpt deployment of Qwen/Qwen3.6-27B through vLLM 0.24.0 on one NVIDIA A100 40GB. Prior MLX and model-run artifacts are excluded. On SM80, vLLM executes the mixed NVFP4/FP8 checkpoint through its supported Marlin weight-only paths rather than native NVFP4 tensor cores.",
   "hardware_envelope": {
-    "chip": "Apple M4 Max",
-    "unified_memory_bytes": 51539607552,
-    "architecture": "arm64",
-    "accelerator": "Apple Metal"
+    "gpu_model": "NVIDIA A100-SXM4-40GB",
+    "minimum_vram_bytes": 40000000000,
+    "architecture": "x86_64",
+    "accelerator": "NVIDIA CUDA (SM80)"
   },
   "study_namespace": {
-    "id": "qwen36-27b-mlx4-m4max48-v1",
-    "artifact_root": "artifacts/studies/qwen36-27b-mlx4-m4max48-v1",
+    "id": "qwen36-27b-nvfp4-a10040-v1",
+    "artifact_root": "artifacts/studies/qwen36-27b-nvfp4-a10040-v1",
     "rule": "all-new-e0-through-e10-work-and-ledgers-must-live-under-this-root"
   },
   "active_models": [
     {
-      "name": "qwen3.6-27b-mlx-4bit",
+      "name": "qwen3.6-27b-nvfp4",
       "upstream_model": "Qwen/Qwen3.6-27B",
-      "repository": "mlx-community/Qwen3.6-27B-4bit",
-      "revision": "c000ac2c2057d94be3fa931000c31723aac53282",
-      "runtime": "mlx",
-      "quantization": "affine-g64-mlx-4bit",
-      "artifact_size_bytes": 16081490064,
-      "model_config": "configs/models/qwen3.6-27b-mlx-4bit.yaml",
-      "model_config_sha256": "6a0a47129637c50a4bf2df039dfacc8b65538336e665c41a63d52327096d51f3",
-      "snapshot_manifest": "configs/models/qwen3.6-27b-mlx-4bit.snapshot.json",
-      "snapshot_manifest_sha256": "d19fe3ddc525b000bd8d00b89d869e935c5b4652d95bcc596ca100c29f77b79f",
-      "runtime_policy": "configs/runtimes/qwen3.6-27b-mlx-4bit-policy.json",
-      "runtime_policy_sha256": "10d19a5bd9d10b8f52e6908fb1f73ea6d5192138c253b75301623f1f2d381e77",
-      "runtime_policy_digest": "1f60131092713ca39b2c3a8c156a77f8344526137308b715373df656db064185"
+      "repository": "nvidia/Qwen3.6-27B-NVFP4",
+      "revision": "0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+      "runtime": "vllm",
+      "quantization": "modelopt-mixed-nvfp4-fp8",
+      "artifact_size_bytes": 21941623844,
+      "model_config": "configs/models/qwen3.6-27b-nvfp4.yaml",
+      "model_config_sha256": "adaa2aa1d55ae8e712078cae7e22dd3eccc0db4f8fd4c3b2e45feea3ce52d121",
+      "snapshot_manifest": "configs/models/qwen3.6-27b-nvfp4.snapshot.json",
+      "snapshot_manifest_sha256": "e2bdda10aa078b656b788dfcd0a3293693fd0da774deee4d7f333293c27c8fa5",
+      "runtime_policy": "configs/runtimes/qwen3.6-27b-nvfp4-policy.json",
+      "runtime_policy_sha256": "fd73f027d7bc4d5fc227f244a4b33a41104cba2e9bf41f21014b9c45551118ce",
+      "runtime_policy_digest": "758860aac89973db259ea1d1f91ca421695a721cf0f6a57461a1be746e6f626d"
     }
   ],
-  "preserved_model_independent_evidence": {
-    "runtime_validation_cohort_manifest_digest": "bb89b2da16d899f8a38c0b090f84d1e43ffd1132e0fe0693295230b804f44442",
-    "contamination_manifest_digest": "ae79350a5e2f6310fccec4b91e9ef55821996f1797baacb21fb7de3d7b6131f2",
-    "manual_review_manifest_digest": "02f12825cb2b362b0bbbdde378f2018c15a0859d262bcbf3df2fb4ac9bfd02d6"
+  "model_independent_evidence_policy": {
+    "runtime_validation_cohort": "regenerate-under-active-study-namespace",
+    "contamination_review": "regenerate-from-pinned-source-snapshots",
+    "manual_review": "new-human-review-required-before-e0-completion"
   },
   "required_effect": {
-    "e0": "rerun-qwen-runtime-validation-and-complete-a-new-e0-ledger-in-the-qwen-study-namespace",
-    "e1_through_e10": "run-only-the-sole-active-qwen-mlx-model-in-the-qwen-study-namespace",
-    "runtime_preflight": "require-a-live-passed-m4-max-receipt-before-qwen-e0",
+    "e0": "regenerate-model-independent-inputs-and-complete-a-new-qwen-e0-ledger-in-the-qwen-study-namespace",
+    "e1_through_e10": "run-only-the-sole-active-qwen-vllm-model-in-the-qwen-study-namespace",
+    "runtime_preflight": "require-a-live-passed-a100-sm80-receipt-before-qwen-e0",
     "colab": "retired"
   },
-  "amendment_digest": "fc26c55c864156a296d030dcd4624885f21d933075979a1891985cf6f252a7a7"
+  "amendment_digest": "8eae69a6fa1435ceb7a67b238d8f42772d782fad60e94adf01d1d69f6a1563c7"
 }

@@ -1,7 +1,7 @@
 """Development-only selection of the calibrated M6 early-token C/I/A probe.
 
 The workflow replays frozen E1 ``T-controller`` outputs and the independently
-selected E8 M3 ``T-dev`` outputs through the exact live MLX runtime.  It captures
+selected E8 M3 ``T-dev`` outputs through the exact live VLLM runtime.  It captures
 post-first-token and post-four-token features, fits the preregistered probe grid,
 and freezes one winner before the one-shot E10 ledger can be created.
 """
@@ -46,7 +46,7 @@ from mfh.experiments.e6_likelihood import E6RuntimeAttestor
 from mfh.experiments.model_selection import validate_active_study_artifact_paths
 from mfh.experiments.protocol import ExperimentPhase, StudyProtocol
 from mfh.experiments.runner import PhaseRunLedger
-from mfh.inference.mlx_research import MlxResearchInterventionState
+from mfh.inference.vllm_research import VllmResearchInterventionState
 from mfh.methods.adaptive import AdaptiveController, load_adaptive_controller
 from mfh.methods.features import (
     ActivationFeatureSchema,
@@ -587,7 +587,7 @@ def _intervention_state(
     controller: AdaptiveController,
     record: GenerationRecord,
     attestor: E6RuntimeAttestor,
-) -> Mapping[tuple[ActivationSite, int], MlxResearchInterventionState]:
+) -> Mapping[tuple[ActivationSite, int], VllmResearchInterventionState]:
     action = record.metadata.get("policy_action")
     if action != "intervene":
         if action not in {"release", "abstain"}:

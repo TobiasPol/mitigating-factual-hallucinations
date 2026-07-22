@@ -216,7 +216,7 @@
       \begin{enumerate}\setlength\itemsep{0.06cm}
         \item Colab Free offered a T4 or v5e TPU, but its RAM/session limits could not support the complete activation workflow reliably.
         \item The Colab notebook and import bundle were retired before scientific E1 results.
-        \item The study moved to one native Apple-silicon checkpoint on the available MacBook Pro.
+        \item The study moved to one native CUDA checkpoint on a single A100 40GB.
       \end{enumerate}
     \end{column}
     \begin{column}{0.47\textwidth}
@@ -238,17 +238,17 @@
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.48\textwidth}
       \textbf{Pinned system}\par\vspace{0.15cm}
-      \texttt{mlx-community/Qwen3.6-27B-4bit}\par
+      \texttt{nvidia/Qwen3.6-27B-NVFP4}\par
       exact revision \texttt{c000ac2c...3282}\par
-      official MLX 0.31.2 / MLX-LM 0.31.3\par
-      Apple M4 Max, 48 GiB unified memory\par\vspace{0.35cm}
-      64 blocks, hidden size 5,120; pinned 16.08 GB snapshot; uniform affine group-64 four-bit representation of \texttt{Qwen/Qwen3.6-27B}.
+      vLLM 0.24.0 with ModelOpt mixed loading\par
+      NVIDIA A100-SXM4 40GB, SM80\par\vspace{0.35cm}
+      64 blocks, hidden size 5,120; pinned 21.94 GB snapshot; mixed FP8/NVFP4 representation of \texttt{Qwen/Qwen3.6-27B}.
     \end{column}
     \begin{column}{0.46\textwidth}
       \textbf{Why this model}\par\vspace{0.15cm}
       \begin{itemize}\setlength\itemsep{0.13cm}
-        \item It fits the approved 48 GiB machine with headroom for inference state.
-        \item Native MLX uses the released Apple-silicon representation.
+        \item It fits the approved A100 40GB with headroom for inference state.
+        \item Native vLLM uses the released NVIDIA ModelOpt representation.
         \item One uniform quantization rule avoids layer-dependent precision as a hidden experimental factor.
         \item Live preflight must prove all intervention sites on both linear- and full-attention blocks before E0.
       \end{itemize}
@@ -326,7 +326,7 @@
         \item exact model and snapshot identity
         \item tokenizer and chat-template identity
         \item deterministic decoding across repeated questions
-        \item throughput, latency, and peak unified memory
+        \item throughput, latency, and peak GPU memory
         \item all required activation capture/intervention sites
         \item scientific admission after contamination review
       \end{itemize}
@@ -437,7 +437,7 @@
     \end{column}
     \begin{column}{0.31\textwidth}
       \textcolor{Blue}{\bfseries Next execution}\par\vspace{0.15cm}
-      Run live M4 Max preflight, Qwen E0, then a fresh Qwen E1 in the active namespace.
+      Run live A100 preflight, Qwen E0, then a fresh Qwen E1 in the active namespace.
     \end{column}
     \begin{column}{0.31\textwidth}
       \textcolor{Amber}{\bfseries Evidence boundary}\par\vspace{0.15cm}
@@ -455,7 +455,7 @@
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.47\textwidth}
       \textbf{1. Admit the Qwen runtime}\par
-      Download and verify the exact snapshot, run live M4 Max hook preflight, then execute and finalize a fresh Qwen E0.\par\vspace{0.25cm}
+      Download and verify the exact snapshot, run live A100 hook preflight, then execute and finalize a fresh Qwen E0.\par\vspace{0.25cm}
       \textbf{2. Run Qwen E1--E4 in order}\par
       Capture only frozen activations, calibrate probes, select static controls, and compare established baselines without touching confirmatory sets.
     \end{column}

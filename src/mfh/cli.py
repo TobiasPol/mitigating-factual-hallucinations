@@ -131,6 +131,7 @@ def _split(args: argparse.Namespace) -> int:
         overwrite=args.overwrite,
     )
     output: dict[str, object] = dict(asdict(result.report))
+    output["bundle_sha256"] = sha256_path(args.output)
     if curation_summary is not None:
         output["curation"] = curation_summary
     _print(output)
@@ -535,9 +536,9 @@ def _external_checkpoint(args: argparse.Namespace) -> str | None:
     return checkpoint
 
 
-def _prepare_e1_mlx(args: argparse.Namespace) -> int:
+def _prepare_e1_vllm(args: argparse.Namespace) -> int:
     from mfh.data.reviewed_splits import authorize_reviewed_split_bundle
-    from mfh.experiments.e1_mlx import prepare_e1_mlx
+    from mfh.experiments.e1_vllm import prepare_e1_vllm
 
     reviewed = authorize_reviewed_split_bundle(
         args.splits,
@@ -549,15 +550,15 @@ def _prepare_e1_mlx(args: argparse.Namespace) -> int:
         review_inputs=_contamination_review_inputs(args),
         plan=_reviewed_split_plan(args),
     )
-    result = prepare_e1_mlx(**_e1_inputs(args), verified_reviewed_splits=reviewed)
+    result = prepare_e1_vllm(**_e1_inputs(args), verified_reviewed_splits=reviewed)
     _print(result)
     return 0
 
 
-def _run_e1_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import run_e1_mlx_generations
+def _run_e1_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e1_vllm import run_e1_vllm_generations
 
-    result = run_e1_mlx_generations(
+    result = run_e1_vllm_generations(
         **_e1_inputs(args),
         request_budget=args.request_budget,
         expected_resume_checkpoint=_external_checkpoint(args),
@@ -568,7 +569,7 @@ def _run_e1_mlx(args: argparse.Namespace) -> int:
 
 
 def _grade_e1_openrouter(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import grade_e1_openrouter, load_env_secret
+    from mfh.experiments.e1_vllm import grade_e1_openrouter, load_env_secret
 
     api_key = load_env_secret(args.env_file, "OPENROUTER_API_KEY")
     result = grade_e1_openrouter(
@@ -586,7 +587,7 @@ def _grade_strongreject_openrouter(args: argparse.Namespace) -> int:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     from mfh.evaluation.strongreject import grade_strongreject_batch
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
 
     api_key = load_env_secret(args.env_file, "OPENROUTER_API_KEY")
     try:
@@ -610,9 +611,9 @@ def _grade_strongreject_openrouter(args: argparse.Namespace) -> int:
 
 
 def _finalize_e1(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import finalize_e1_mlx
+    from mfh.experiments.e1_vllm import finalize_e1_vllm
 
-    result = finalize_e1_mlx(
+    result = finalize_e1_vllm(
         **_e1_inputs(args),
         output_directory=args.output,
         checkpoint_batch_size=args.checkpoint_batch_size,
@@ -622,7 +623,7 @@ def _finalize_e1(args: argparse.Namespace) -> int:
 
 
 def _verify_e1_outputs(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import verify_e1_output_bundle
+    from mfh.experiments.e1_vllm import verify_e1_output_bundle
 
     manifest = verify_e1_output_bundle(
         args.output,
@@ -674,7 +675,7 @@ def _prepare_aa_official(args: argparse.Namespace) -> int:
 
 def _run_aa_official(args: argparse.Namespace) -> int:
     from mfh.experiments.aa_official_track import run_aa_official_track
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
 
     if args.checkpoint_file is None:
         raise ValueError("run-aa-official requires --checkpoint-file")
@@ -780,32 +781,32 @@ def _e2_prepared_summary(prepared: Any) -> dict[str, Any]:
     }
 
 
-def _prepare_e2_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e2_mlx import prepare_e2_mlx
+def _prepare_e2_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e2_vllm import prepare_e2_vllm
 
-    prepared = prepare_e2_mlx(**_e2_inputs(args), shard_rows=args.shard_rows)
+    prepared = prepare_e2_vllm(**_e2_inputs(args), shard_rows=args.shard_rows)
     _print(_e2_prepared_summary(prepared))
     return 0
 
 
-def _run_e2_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e2_mlx import run_e2_mlx_capture
+def _run_e2_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e2_vllm import run_e2_vllm_capture
 
-    _print(run_e2_mlx_capture(**_e2_inputs(args), request_budget=args.request_budget))
+    _print(run_e2_vllm_capture(**_e2_inputs(args), request_budget=args.request_budget))
     return 0
 
 
 def _verify_e2_capture(args: argparse.Namespace) -> int:
-    from mfh.experiments.e2_mlx import verify_e2_mlx_capture
+    from mfh.experiments.e2_vllm import verify_e2_vllm_capture
 
-    _print(verify_e2_mlx_capture(**_e2_inputs(args), require_complete=args.require_complete))
+    _print(verify_e2_vllm_capture(**_e2_inputs(args), require_complete=args.require_complete))
     return 0
 
 
 def _fit_e2_probes(args: argparse.Namespace) -> int:
-    from mfh.experiments.e2_mlx import fit_e2_mlx_probes
+    from mfh.experiments.e2_vllm import fit_e2_vllm_probes
 
-    bundle = fit_e2_mlx_probes(
+    bundle = fit_e2_vllm_probes(
         args.output,
         **_e2_inputs(args),
         probe_work_directory=args.probe_work_directory,
@@ -845,9 +846,9 @@ def _verify_e2_probes(args: argparse.Namespace) -> int:
 
 
 def _finalize_e2(args: argparse.Namespace) -> int:
-    from mfh.experiments.e2_mlx import finalize_e2_mlx_phase
+    from mfh.experiments.e2_vllm import finalize_e2_vllm_phase
 
-    terminal = finalize_e2_mlx_phase(
+    terminal = finalize_e2_vllm_phase(
         args.output,
         **_e2_inputs(args),
         probe_bundle_directory=args.probe_bundle,
@@ -870,16 +871,16 @@ def _m2_caa_inputs(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _prepare_m2_caa(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_caa_mlx import prepare_m2_caa_work
+    from mfh.experiments.e4_caa_vllm import prepare_m2_caa_work
 
     _print(prepare_m2_caa_work(args.work, **_m2_caa_inputs(args)))
     return 0
 
 
 def _run_m2_caa(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_caa_mlx import run_m2_caa_work
+    from mfh.experiments.e4_caa_vllm import run_m2_caa_work
     from mfh.experiments.model_selection import validate_active_model_spec
-    from mfh.inference.mlx_research import MlxResearchRuntime
+    from mfh.inference.vllm_research import VllmResearchRuntime
 
     model = load_model_spec(args.model_config)
     validate_active_model_spec(model)
@@ -893,7 +894,7 @@ def _run_m2_caa(args: argparse.Namespace) -> int:
             raise ValueError("M2 CAA plan runtime identity is invalid")
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ValueError(f"cannot load M2 CAA runtime identity: {exc}") from exc
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         model,
         snapshot_path=args.snapshot_directory,
         seed=17,
@@ -914,7 +915,7 @@ def _run_m2_caa(args: argparse.Namespace) -> int:
 
 
 def _verify_m2_caa_work(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_caa_mlx import verify_m2_caa_work
+    from mfh.experiments.e4_caa_vllm import verify_m2_caa_work
 
     _print(
         verify_m2_caa_work(
@@ -927,7 +928,7 @@ def _verify_m2_caa_work(args: argparse.Namespace) -> int:
 
 
 def _finalize_m2_caa(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_caa_mlx import finalize_m2_caa_artifact
+    from mfh.experiments.e4_caa_vllm import finalize_m2_caa_artifact
 
     artifact = finalize_m2_caa_artifact(
         args.output,
@@ -948,7 +949,7 @@ def _finalize_m2_caa(args: argparse.Namespace) -> int:
 
 
 def _verify_m2_caa_artifact(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_caa_mlx import verify_m2_caa_artifact
+    from mfh.experiments.e4_caa_vllm import verify_m2_caa_artifact
 
     artifact = verify_m2_caa_artifact(
         args.artifact,
@@ -967,7 +968,7 @@ def _verify_m2_caa_artifact(args: argparse.Namespace) -> int:
 
 
 def _build_e4_act_baseline(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_act_mlx import build_e4_act_baseline
+    from mfh.experiments.e4_act_vllm import build_e4_act_baseline
 
     artifact = build_e4_act_baseline(
         args.output,
@@ -992,23 +993,23 @@ def _build_e4_act_baseline(args: argparse.Namespace) -> int:
     return 0
 
 
-def _prepare_e4_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_mlx import prepare_e4_mlx_screen
-    from mfh.inference.mlx_preflight import validate_mlx_preflight_receipt
+def _prepare_e4_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e4_vllm import prepare_e4_vllm_screen
     from mfh.inference.transformers_snapshot import verify_transformers_snapshot
+    from mfh.inference.vllm_preflight import validate_vllm_preflight_receipt
 
     model = load_model_spec(args.model_config)
     verify_transformers_snapshot(model, args.snapshot_directory, args.snapshot_manifest)
     project_root = args.study_config.absolute().parents[2]
-    validate_mlx_preflight_receipt(
+    validate_vllm_preflight_receipt(
         args.runtime_receipt,
         project_root=project_root,
         model_config=args.model_config,
         snapshot_directory=args.snapshot_directory,
         snapshot_manifest=args.snapshot_manifest,
-        runtime_policy=project_root / "configs/runtimes/qwen3.6-27b-mlx-4bit-policy.json",
+        runtime_policy=project_root / "configs/runtimes/qwen3.6-27b-nvfp4-policy.json",
     )
-    setup = prepare_e4_mlx_screen(
+    setup = prepare_e4_vllm_screen(
         args.setup,
         args.ledger,
         dev_questions=tuple(read_questions(args.dev_questions)),
@@ -1043,14 +1044,14 @@ def _prepare_e4_mlx(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_e4_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_mlx import load_e4_mlx_setup, run_e4_mlx_screen
+def _run_e4_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e4_vllm import load_e4_vllm_setup, run_e4_vllm_screen
     from mfh.experiments.model_selection import validate_active_model_spec
-    from mfh.inference.mlx_research import MlxResearchRuntime
+    from mfh.inference.vllm_research import VllmResearchRuntime
 
     model = load_model_spec(args.model_config)
     validate_active_model_spec(model)
-    setup = load_e4_mlx_setup(args.setup)
+    setup = load_e4_vllm_setup(args.setup)
     m2 = Path(setup.report.artifact_paths["implementation:M2"])
     try:
         plan = json.loads((m2 / "plan.json").read_text(encoding="utf-8"))
@@ -1062,14 +1063,14 @@ def _run_e4_mlx(args: argparse.Namespace) -> int:
             raise TypeError("runtime identity is incomplete")
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ValueError(f"cannot load E4 runtime identity: {exc}") from exc
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         model,
         snapshot_path=args.snapshot_directory,
         seed=17,
         research_provenance=provenance,
     )
     try:
-        result = run_e4_mlx_screen(
+        result = run_e4_vllm_screen(
             args.setup,
             args.ledger,
             study=load_study_protocol(args.study_config),
@@ -1085,11 +1086,11 @@ def _run_e4_mlx(args: argparse.Namespace) -> int:
     return 0
 
 
-def _verify_e4_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_mlx import verify_e4_mlx_screen
+def _verify_e4_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e4_vllm import verify_e4_vllm_screen
 
     _print(
-        verify_e4_mlx_screen(
+        verify_e4_vllm_screen(
             args.setup,
             args.ledger,
             study=load_study_protocol(args.study_config),
@@ -1099,10 +1100,10 @@ def _verify_e4_mlx(args: argparse.Namespace) -> int:
     return 0
 
 
-def _finalize_e4_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e4_mlx import finalize_e4_mlx_screen
+def _finalize_e4_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e4_vllm import finalize_e4_vllm_screen
 
-    promotion, terminal = finalize_e4_mlx_screen(
+    promotion, terminal = finalize_e4_vllm_screen(
         args.setup,
         args.ledger,
         study=load_study_protocol(args.study_config),
@@ -1146,7 +1147,9 @@ def _e5_source_context(
 def _write_e3_operator_runbook(args: argparse.Namespace) -> int:
     from mfh.experiments.e3_operator import write_e3_operator_runbook_template
 
-    path = write_e3_operator_runbook_template(args.output)
+    path = write_e3_operator_runbook_template(
+        args.output, reviewed_splits=args.reviewed_splits
+    )
     _print({"valid": True, "runbook": str(path.resolve())})
     return 0
 
@@ -1192,6 +1195,7 @@ def _materialize_e5_controller_splits(args: argparse.Namespace) -> int:
     verified = write_e5_controller_splits(
         args.output,
         source_questions=args.source_questions,
+        expected_reviewed_split_manifest_digest=args.expected_reviewed_split_manifest_digest,
     )
     _print(
         {
@@ -1212,6 +1216,7 @@ def _verify_e5_controller_splits(args: argparse.Namespace) -> int:
         args.splits,
         source_questions=args.source_questions,
         expected_manifest_digest=args.expected_manifest_digest,
+        expected_reviewed_split_manifest_digest=args.expected_reviewed_split_manifest_digest,
     )
     _print(
         {
@@ -1292,7 +1297,7 @@ def _prepare_e5_fit_capture(args: argparse.Namespace) -> int:
 def _run_e5_fit_capture(args: argparse.Namespace) -> int:
     from mfh.experiments.e5_capture import run_e5_fit_capture
     from mfh.experiments.model_selection import validate_active_model_spec
-    from mfh.inference.mlx_research import MlxResearchRuntime
+    from mfh.inference.vllm_research import VllmResearchRuntime
 
     questions, prompts, snapshot = _e5_source_context(args)
     model = load_model_spec(args.model_config)
@@ -1301,7 +1306,7 @@ def _run_e5_fit_capture(args: argparse.Namespace) -> int:
     provenance = identity.get("research_provenance")
     if not isinstance(provenance, Mapping):
         raise ValueError("E5 source runtime lacks its frozen research provenance")
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         model,
         snapshot_path=args.snapshot_directory,
         seed=17,
@@ -1482,7 +1487,7 @@ def _prepare_e5_layer_labels(args: argparse.Namespace) -> int:
 def _run_e5_layer_labels(args: argparse.Namespace) -> int:
     from mfh.experiments.e5_layer_labels import run_e5_layer_label_capture
     from mfh.experiments.model_selection import validate_active_model_spec
-    from mfh.inference.mlx_research import MlxResearchRuntime
+    from mfh.inference.vllm_research import VllmResearchRuntime
 
     _questions, prompts, _snapshot, private_key, capture = _e5_verified_fit_capture_context(args)
     controller_datasets, _bundle = _e5_controller_training_datasets(
@@ -1494,7 +1499,7 @@ def _run_e5_layer_labels(args: argparse.Namespace) -> int:
     provenance = capture.plan["runtime_identity"].get("research_provenance")
     if not isinstance(provenance, Mapping):
         raise ValueError("E5 layer-label runtime lacks frozen research provenance")
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         model,
         snapshot_path=args.snapshot_directory,
         seed=17,
@@ -1764,7 +1769,7 @@ def _run_e5_native_ablation(args: argparse.Namespace) -> int:
         run_e5_native_ablation,
     )
     from mfh.experiments.model_selection import validate_active_model_spec
-    from mfh.inference.mlx_research import MlxResearchRuntime
+    from mfh.inference.vllm_research import VllmResearchRuntime
 
     private_key = args.execution_key_file.read_text(encoding="utf-8").strip()
     try:
@@ -1779,7 +1784,7 @@ def _run_e5_native_ablation(args: argparse.Namespace) -> int:
     provenance = identity.get("research_provenance") if isinstance(identity, Mapping) else None
     if not isinstance(provenance, Mapping):
         raise ValueError("E5 native runtime lacks frozen research provenance")
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         model,
         snapshot_path=args.snapshot_directory,
         seed=17,
@@ -2441,7 +2446,12 @@ def _e6_runbook(args: argparse.Namespace) -> Any:
 def _write_e6_runbook(args: argparse.Namespace) -> int:
     from mfh.experiments.e6_operator import write_e6_runbook_template
 
-    digest = write_e6_runbook_template(args.output, m1_layer=args.m1_layer)
+    digest = write_e6_runbook_template(
+        args.output,
+        m1_layer=args.m1_layer,
+        official_grader_bundle=args.official_grader_bundle,
+        expected_grader_manifest_digest=args.expected_grader_manifest_digest,
+    )
     _print({"valid": True, "runbook": str(args.output.resolve()), "sha256": digest})
     return 0
 
@@ -2787,7 +2797,7 @@ def _stage_e9_inputs(args: argparse.Namespace) -> int:
 
 
 def _freeze_e9_inputs(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
     from mfh.experiments.e9_freeze_operator import freeze_e9_input_suite
 
     result = freeze_e9_input_suite(
@@ -2832,7 +2842,7 @@ def _prepare_e10_freezes(args: argparse.Namespace) -> int:
 
 
 def _run_e10_early_probe(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
     from mfh.experiments.e10_freeze_operator import run_e10_freeze_capture
 
     _print(
@@ -2884,7 +2894,7 @@ def _finalize_e10_freezes(args: argparse.Namespace) -> int:
 
 
 def _freeze_robustness_plan(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
     from mfh.experiments.robustness_diagnostics import (
         freeze_robustness_diagnostic_plan,
     )
@@ -2977,7 +2987,7 @@ def _prepare_robustness_execution(args: argparse.Namespace) -> int:
 
 
 def _run_robustness_rq1_capture(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
     from mfh.experiments.robustness_operator import run_robustness_rq1_capture
 
     _print(
@@ -2998,7 +3008,7 @@ def _run_robustness_rq1_capture(args: argparse.Namespace) -> int:
 
 
 def _verify_robustness_rq1_capture(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
     from mfh.experiments.robustness_operator import verify_robustness_rq1_capture
 
     _print(
@@ -3019,7 +3029,7 @@ def _verify_robustness_rq1_capture(args: argparse.Namespace) -> int:
 
 
 def _run_robustness_prompts(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
     from mfh.experiments.robustness_operator import (
         run_prompt_paraphrase_diagnostics,
     )
@@ -3043,7 +3053,7 @@ def _run_robustness_prompts(args: argparse.Namespace) -> int:
 
 
 def _run_robustness_rq1(args: argparse.Namespace) -> int:
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
     from mfh.experiments.robustness_operator import (
         run_rq1_generalization_diagnostics,
     )
@@ -3164,7 +3174,7 @@ def _prepare_confirmatory(args: argparse.Namespace) -> int:
 
 def _run_confirmatory(args: argparse.Namespace) -> int:
     from mfh.experiments.confirmatory_operator import execute_confirmatory_runbook
-    from mfh.experiments.e1_mlx import load_env_secret
+    from mfh.experiments.e1_vllm import load_env_secret
 
     result = execute_confirmatory_runbook(
         _confirmatory_runbook(args),
@@ -3241,10 +3251,10 @@ def _transformers_snapshot_preflight(args: argparse.Namespace) -> int:
     return 0
 
 
-def _mlx_hook_preflight(args: argparse.Namespace) -> int:
-    from mfh.inference.mlx_preflight import run_mlx_preflight
+def _vllm_hook_preflight(args: argparse.Namespace) -> int:
+    from mfh.inference.vllm_preflight import run_vllm_preflight
 
-    receipt = run_mlx_preflight(
+    receipt = run_vllm_preflight(
         project_root=args.project_root,
         model_directory=args.snapshot_directory,
         model_config=args.model_config,
@@ -3265,10 +3275,10 @@ def _mlx_hook_preflight(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_e0_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e0_mlx import run_mlx_e0
+def _run_e0_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e0_vllm import run_vllm_e0
 
-    result = run_mlx_e0(
+    result = run_vllm_e0(
         cohort_directory=args.cohort,
         reserved_source=args.reserved_source,
         expected_cohort_manifest_digest=args.expected_cohort_manifest_digest,
@@ -3291,10 +3301,10 @@ def _run_e0_mlx(args: argparse.Namespace) -> int:
     return 0
 
 
-def _verify_e0_mlx(args: argparse.Namespace) -> int:
-    from mfh.experiments.e0_mlx import verify_mlx_e0_bundle
+def _verify_e0_vllm(args: argparse.Namespace) -> int:
+    from mfh.experiments.e0_vllm import verify_vllm_e0_bundle
 
-    manifest = verify_mlx_e0_bundle(
+    manifest = verify_vllm_e0_bundle(
         args.directory,
         expected_manifest_digest=args.expected_manifest_digest,
         expected_plan_identity=args.expected_plan_identity,
@@ -3329,10 +3339,10 @@ def _write_e0_completion(args: argparse.Namespace) -> int:
 
     manifest = write_e0_completion_receipt(
         args.output,
-        mlx_directory=args.mlx_directory,
-        expected_mlx_manifest_digest=args.expected_mlx_manifest_digest,
-        expected_mlx_plan_identity=args.expected_mlx_plan_identity,
-        mlx_inputs=_e0_mlx_completion_inputs(args),
+        vllm_directory=args.vllm_directory,
+        expected_vllm_manifest_digest=args.expected_vllm_manifest_digest,
+        expected_vllm_plan_identity=args.expected_vllm_plan_identity,
+        vllm_inputs=_e0_vllm_completion_inputs(args),
         review_result_directory=args.review_result,
         expected_review_result_manifest_digest=args.expected_review_result_manifest_digest,
         review_queue_directory=args.review_queue,
@@ -3345,6 +3355,10 @@ def _write_e0_completion(args: argparse.Namespace) -> int:
             "target_sources": args.target,
             "expected_contamination_manifest_digest": args.contamination_manifest_digest,
         },
+        grader_bundle=args.grader_bundle,
+        expected_grader_manifest_digest=args.expected_grader_manifest_digest,
+        reviewed_splits=args.reviewed_splits,
+        expected_reviewed_split_manifest_digest=args.expected_reviewed_split_manifest_digest,
     )
     _print(
         {
@@ -3363,10 +3377,10 @@ def _verify_e0_completion(args: argparse.Namespace) -> int:
     manifest = verify_e0_completion_receipt(
         args.receipt,
         expected_manifest_digest=args.expected_manifest_digest,
-        mlx_directory=args.mlx_directory,
-        expected_mlx_manifest_digest=args.expected_mlx_manifest_digest,
-        expected_mlx_plan_identity=args.expected_mlx_plan_identity,
-        mlx_inputs=_e0_mlx_completion_inputs(args),
+        vllm_directory=args.vllm_directory,
+        expected_vllm_manifest_digest=args.expected_vllm_manifest_digest,
+        expected_vllm_plan_identity=args.expected_vllm_plan_identity,
+        vllm_inputs=_e0_vllm_completion_inputs(args),
         review_result_directory=args.review_result,
         expected_review_result_manifest_digest=args.expected_review_result_manifest_digest,
         review_queue_directory=args.review_queue,
@@ -3379,6 +3393,10 @@ def _verify_e0_completion(args: argparse.Namespace) -> int:
             "target_sources": args.target,
             "expected_contamination_manifest_digest": args.contamination_manifest_digest,
         },
+        grader_bundle=args.grader_bundle,
+        expected_grader_manifest_digest=args.expected_grader_manifest_digest,
+        reviewed_splits=args.reviewed_splits,
+        expected_reviewed_split_manifest_digest=args.expected_reviewed_split_manifest_digest,
     )
     _print(
         {
@@ -3398,10 +3416,10 @@ def _finalize_e0_phase(args: argparse.Namespace) -> int:
         args.output,
         completion_receipt=args.receipt,
         expected_completion_manifest_digest=args.expected_manifest_digest,
-        mlx_directory=args.mlx_directory,
-        expected_mlx_manifest_digest=args.expected_mlx_manifest_digest,
-        expected_mlx_plan_identity=args.expected_mlx_plan_identity,
-        mlx_inputs=_e0_mlx_completion_inputs(args),
+        vllm_directory=args.vllm_directory,
+        expected_vllm_manifest_digest=args.expected_vllm_manifest_digest,
+        expected_vllm_plan_identity=args.expected_vllm_plan_identity,
+        vllm_inputs=_e0_vllm_completion_inputs(args),
         review_result_directory=args.review_result,
         expected_review_result_manifest_digest=args.expected_review_result_manifest_digest,
         review_queue_directory=args.review_queue,
@@ -3414,6 +3432,10 @@ def _finalize_e0_phase(args: argparse.Namespace) -> int:
             "target_sources": args.target,
             "expected_contamination_manifest_digest": args.contamination_manifest_digest,
         },
+        grader_bundle=args.grader_bundle,
+        expected_grader_manifest_digest=args.expected_grader_manifest_digest,
+        reviewed_splits=args.reviewed_splits,
+        expected_reviewed_split_manifest_digest=args.expected_reviewed_split_manifest_digest,
     )
     _print(
         {
@@ -3426,7 +3448,7 @@ def _finalize_e0_phase(args: argparse.Namespace) -> int:
     return 0
 
 
-def _e0_mlx_completion_inputs(args: argparse.Namespace) -> dict[str, Any]:
+def _e0_vllm_completion_inputs(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "cohort_directory": args.cohort,
         "reserved_source": args.reserved_source,
@@ -3444,7 +3466,7 @@ def _e0_mlx_completion_inputs(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _add_e0_completion_evidence_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("mlx_directory", type=Path)
+    parser.add_argument("vllm_directory", type=Path)
     parser.add_argument("review_result", type=Path)
     parser.add_argument("review_queue", type=Path)
     parser.add_argument("contamination_bundle", type=Path)
@@ -3457,14 +3479,18 @@ def _add_e0_completion_evidence_arguments(parser: argparse.ArgumentParser) -> No
     parser.add_argument("snapshot_directory", type=Path)
     parser.add_argument("snapshot_manifest", type=Path)
     parser.add_argument("runtime_config", type=Path)
+    parser.add_argument("grader_bundle", type=Path)
+    parser.add_argument("reviewed_splits", type=Path)
     parser.add_argument("--target", type=Path, action="append", required=True)
-    parser.add_argument("--expected-mlx-manifest-digest", required=True)
-    parser.add_argument("--expected-mlx-plan-identity", required=True)
+    parser.add_argument("--expected-vllm-manifest-digest", required=True)
+    parser.add_argument("--expected-vllm-plan-identity", required=True)
     parser.add_argument("--expected-review-result-manifest-digest", required=True)
     parser.add_argument("--expected-review-queue-manifest-digest", required=True)
     parser.add_argument("--expected-cohort-manifest-digest", required=True)
     parser.add_argument("--parent-split-manifest-digest", required=True)
     parser.add_argument("--contamination-manifest-digest", required=True)
+    parser.add_argument("--expected-grader-manifest-digest", required=True)
+    parser.add_argument("--expected-reviewed-split-manifest-digest", required=True)
     parser.add_argument("--prompt-config", type=Path, default=Path("configs/prompts/primary.yaml"))
     parser.add_argument(
         "--inference-config", type=Path, default=Path("configs/experiments/core.yaml")
@@ -3841,20 +3867,20 @@ def build_parser() -> argparse.ArgumentParser:
     verify_e1_graders_parser.set_defaults(handler=_verify_e1_graders)
 
     prepare_e1_parser = subparsers.add_parser(
-        "prepare-e1-mlx",
+        "prepare-e1-vllm",
         help="freeze the reviewed E1 matrix and create its resumable ledger",
     )
     _add_e1_common_arguments(prepare_e1_parser)
     _add_reviewed_split_evidence_arguments(prepare_e1_parser)
-    prepare_e1_parser.set_defaults(handler=_prepare_e1_mlx)
+    prepare_e1_parser.set_defaults(handler=_prepare_e1_vllm)
 
     run_e1_parser = subparsers.add_parser(
-        "run-e1-mlx",
-        help="run or explicitly resume the exact 19,800 native-MLX generations",
+        "run-e1-vllm",
+        help="run or explicitly resume the exact 19,800 native-VLLM generations",
     )
     _add_e1_common_arguments(run_e1_parser)
     _add_e1_execution_arguments(run_e1_parser)
-    run_e1_parser.set_defaults(handler=_run_e1_mlx)
+    run_e1_parser.set_defaults(handler=_run_e1_vllm)
 
     grade_e1_parser = subparsers.add_parser(
         "grade-e1-openrouter",
@@ -3921,20 +3947,20 @@ def build_parser() -> argparse.ArgumentParser:
     verify_aa_parser.set_defaults(handler=_verify_aa_official)
 
     prepare_e2_parser = subparsers.add_parser(
-        "prepare-e2-mlx",
+        "prepare-e2-vllm",
         help="freeze the exact E2 capture schedule and resumable activation workspace",
     )
     _add_e2_common_arguments(prepare_e2_parser)
     prepare_e2_parser.add_argument("--shard-rows", type=int, default=64)
-    prepare_e2_parser.set_defaults(handler=_prepare_e2_mlx)
+    prepare_e2_parser.set_defaults(handler=_prepare_e2_vllm)
 
     run_e2_parser = subparsers.add_parser(
-        "run-e2-mlx",
-        help="capture or resume the frozen 21,600-row native-MLX E2 schedule",
+        "run-e2-vllm",
+        help="capture or resume the frozen 21,600-row native-VLLM E2 schedule",
     )
     _add_e2_common_arguments(run_e2_parser)
     run_e2_parser.add_argument("--request-budget", type=int)
-    run_e2_parser.set_defaults(handler=_run_e2_mlx)
+    run_e2_parser.set_defaults(handler=_run_e2_vllm)
 
     verify_e2_capture_parser = subparsers.add_parser(
         "verify-e2-capture",
@@ -3978,6 +4004,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="write the secret-free full E3 operator runbook template",
     )
     e3_runbook_parser.add_argument("output", type=Path)
+    e3_runbook_parser.add_argument("reviewed_splits", type=Path)
     e3_runbook_parser.set_defaults(handler=_write_e3_operator_runbook)
 
     e3_preflight_parser = subparsers.add_parser(
@@ -4013,7 +4040,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_m2_parser = subparsers.add_parser(
         "run-m2-caa",
-        help="capture or resume native-MLX residual CAA pair activations",
+        help="capture or resume native-VLLM residual CAA pair activations",
     )
     _add_m2_caa_common_arguments(run_m2_parser)
     run_m2_parser.add_argument("model_config", type=Path)
@@ -4061,7 +4088,7 @@ def build_parser() -> argparse.ArgumentParser:
     e4_act_parser.set_defaults(handler=_build_e4_act_baseline)
 
     prepare_e4_parser = subparsers.add_parser(
-        "prepare-e4-mlx-screen",
+        "prepare-e4-vllm-screen",
         help="freeze E4 capabilities, policies, screen, and an empty phase ledger",
     )
     prepare_e4_parser.add_argument("dev_questions", type=Path)
@@ -4089,11 +4116,11 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_e4_parser.add_argument(
         "--study-config", type=Path, default=Path("configs/experiments/phases.yaml")
     )
-    prepare_e4_parser.set_defaults(handler=_prepare_e4_mlx)
+    prepare_e4_parser.set_defaults(handler=_prepare_e4_vllm)
 
     run_e4_parser = subparsers.add_parser(
-        "run-e4-mlx-screen",
-        help="run or resume signed native-MLX M1/M2/ACT E4 rows",
+        "run-e4-vllm-screen",
+        help="run or resume signed native-VLLM M1/M2/ACT E4 rows",
     )
     run_e4_parser.add_argument("setup", type=Path)
     run_e4_parser.add_argument("ledger", type=Path)
@@ -4108,10 +4135,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_e4_parser.add_argument(
         "--study-config", type=Path, default=Path("configs/experiments/phases.yaml")
     )
-    run_e4_parser.set_defaults(handler=_run_e4_mlx)
+    run_e4_parser.set_defaults(handler=_run_e4_vllm)
 
     verify_e4_parser = subparsers.add_parser(
-        "verify-e4-mlx-screen",
+        "verify-e4-vllm-screen",
         help="replay E4 setup, records, signatures, grading, and progress",
     )
     verify_e4_parser.add_argument("setup", type=Path)
@@ -4120,10 +4147,10 @@ def build_parser() -> argparse.ArgumentParser:
     verify_e4_parser.add_argument(
         "--study-config", type=Path, default=Path("configs/experiments/phases.yaml")
     )
-    verify_e4_parser.set_defaults(handler=_verify_e4_mlx)
+    verify_e4_parser.set_defaults(handler=_verify_e4_vllm)
 
     finalize_e4_parser = subparsers.add_parser(
-        "finalize-e4-mlx-screen",
+        "finalize-e4-vllm-screen",
         help="derive promotion, evaluate its gate, and freeze the E4 ledger",
     )
     finalize_e4_parser.add_argument("setup", type=Path)
@@ -4133,7 +4160,7 @@ def build_parser() -> argparse.ArgumentParser:
     finalize_e4_parser.add_argument(
         "--study-config", type=Path, default=Path("configs/experiments/phases.yaml")
     )
-    finalize_e4_parser.set_defaults(handler=_finalize_e4_mlx)
+    finalize_e4_parser.set_defaults(handler=_finalize_e4_vllm)
 
     materialize_e5_splits_parser = subparsers.add_parser(
         "materialize-e5-controller-splits",
@@ -4141,6 +4168,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     materialize_e5_splits_parser.add_argument("source_questions", type=Path)
     materialize_e5_splits_parser.add_argument("output", type=Path)
+    materialize_e5_splits_parser.add_argument(
+        "--expected-reviewed-split-manifest-digest", required=True
+    )
     materialize_e5_splits_parser.set_defaults(handler=_materialize_e5_controller_splits)
 
     verify_e5_splits_parser = subparsers.add_parser(
@@ -4150,6 +4180,9 @@ def build_parser() -> argparse.ArgumentParser:
     verify_e5_splits_parser.add_argument("source_questions", type=Path)
     verify_e5_splits_parser.add_argument("splits", type=Path)
     verify_e5_splits_parser.add_argument("--expected-manifest-digest", required=True)
+    verify_e5_splits_parser.add_argument(
+        "--expected-reviewed-split-manifest-digest", required=True
+    )
     verify_e5_splits_parser.set_defaults(handler=_verify_e5_controller_splits)
 
     prepare_e5_capture_parser = subparsers.add_parser(
@@ -4178,7 +4211,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare_e5_capture_parser.add_argument("--shard-rows", type=int, default=64)
     prepare_e5_capture_parser.add_argument(
-        "--max-peak-memory-bytes", type=int, default=48 * 1024**3
+        "--max-peak-memory-bytes", type=int, default=40 * 1024**3
     )
     prepare_e5_capture_parser.add_argument(
         "--prompt-config", type=Path, default=Path("configs/prompts/primary.yaml")
@@ -4187,7 +4220,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_e5_capture_parser = subparsers.add_parser(
         "run-e5-fit-capture",
-        help="capture or resume native-MLX E5 T-steer prompt/response pairs",
+        help="capture or resume native-VLLM E5 T-steer prompt/response pairs",
     )
     run_e5_capture_parser.add_argument("work", type=Path)
     run_e5_capture_parser.add_argument("e3_construction", type=Path)
@@ -4230,7 +4263,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_e5_labels_parser.add_argument("--execution-key-file", type=Path, required=True)
     prepare_e5_labels_parser.add_argument("--shard-rows", type=int, default=64)
     prepare_e5_labels_parser.add_argument("--max-new-tokens", type=int, default=48)
-    prepare_e5_labels_parser.add_argument("--max-peak-memory-bytes", type=int, default=48 * 1024**3)
+    prepare_e5_labels_parser.add_argument("--max-peak-memory-bytes", type=int, default=40 * 1024**3)
     prepare_e5_labels_parser.add_argument(
         "--prompt-config", type=Path, default=Path("configs/prompts/primary.yaml")
     )
@@ -4238,7 +4271,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_e5_labels_parser = subparsers.add_parser(
         "run-e5-layer-labels",
-        help="run or resume native-MLX E5 counterfactual layer labels",
+        help="run or resume native-VLLM E5 counterfactual layer labels",
     )
     run_e5_labels_parser.add_argument("work", type=Path)
     run_e5_labels_parser.add_argument("fit_capture", type=Path)
@@ -4317,7 +4350,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     estimate_e5_native_parser = subparsers.add_parser(
         "estimate-e5-native-ablation",
-        help="estimate the exact 9.73M-row E5 grid from a measured MLX rate",
+        help="estimate the exact 9.73M-row E5 grid from a measured VLLM rate",
     )
     estimate_e5_native_parser.add_argument("--generations-per-second", type=float, required=True)
     estimate_e5_native_parser.add_argument(
@@ -4331,7 +4364,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     prepare_e5_native_parser = subparsers.add_parser(
         "prepare-e5-native-ablation",
-        help="freeze the implicit resumable E5 native-MLX ablation schedule",
+        help="freeze the implicit resumable E5 native-VLLM ablation schedule",
     )
     prepare_e5_native_parser.add_argument("work", type=Path)
     prepare_e5_native_parser.add_argument("screen_receipt", type=Path)
@@ -4349,7 +4382,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare_e5_native_parser.add_argument("--shard-rows", type=int, default=1_024)
     prepare_e5_native_parser.add_argument("--max-new-tokens", type=int, default=48)
-    prepare_e5_native_parser.add_argument("--max-peak-memory-bytes", type=int, default=48 * 1024**3)
+    prepare_e5_native_parser.add_argument("--max-peak-memory-bytes", type=int, default=40 * 1024**3)
     prepare_e5_native_parser.add_argument(
         "--prompt-config", type=Path, default=Path("configs/prompts/primary.yaml")
     )
@@ -4357,7 +4390,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_e5_native_parser = subparsers.add_parser(
         "run-e5-native-ablation",
-        help="run or resume signed native-MLX E5 ablation generations",
+        help="run or resume signed native-VLLM E5 ablation generations",
     )
     run_e5_native_parser.add_argument("work", type=Path)
     run_e5_native_parser.add_argument("model_config", type=Path)
@@ -4656,10 +4689,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     write_e6_parser = subparsers.add_parser(
         "write-e6-runbook",
-        help="write the secret-free native-MLX E6 operator runbook template",
+        help="write the secret-free native-VLLM E6 operator runbook template",
     )
     write_e6_parser.add_argument("output", type=Path)
     write_e6_parser.add_argument("--m1-layer", type=int, required=True)
+    write_e6_parser.add_argument("--official-grader-bundle", type=Path, required=True)
+    write_e6_parser.add_argument("--expected-grader-manifest-digest", required=True)
     write_e6_parser.set_defaults(handler=_write_e6_runbook)
 
     freeze_e6_questions_parser = subparsers.add_parser(
@@ -4680,7 +4715,7 @@ def build_parser() -> argparse.ArgumentParser:
     freeze_e6_questions_parser.add_argument(
         "--model-config",
         type=Path,
-        default=Path("configs/models/qwen3.6-27b-mlx-4bit.yaml"),
+        default=Path("configs/models/qwen3.6-27b-nvfp4.yaml"),
     )
     freeze_e6_questions_parser.add_argument(
         "--prompt-config", type=Path, default=Path("configs/prompts/primary.yaml")
@@ -4690,7 +4725,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     preflight_e6_parser = subparsers.add_parser(
         "preflight-e6",
-        help="replay E6 sources and its exact 59,400-row contract without MLX",
+        help="replay E6 sources and its exact 59,400-row contract without VLLM",
     )
     preflight_e6_parser.add_argument("runbook", type=Path)
     preflight_e6_parser.set_defaults(handler=_preflight_e6)
@@ -4704,14 +4739,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     attest_e6_parser = subparsers.add_parser(
         "attest-e6-runtime",
-        help="load pinned Qwen through MLX and freeze the E6 host attestation",
+        help="load pinned Qwen through VLLM and freeze the E6 host attestation",
     )
     attest_e6_parser.add_argument("runbook", type=Path)
     attest_e6_parser.set_defaults(handler=_attest_e6)
 
     run_e6_parser = subparsers.add_parser(
         "run-e6",
-        help="resume signed generation and teacher-forced likelihood rows through MLX",
+        help="resume signed generation and teacher-forced likelihood rows through VLLM",
     )
     run_e6_parser.add_argument("runbook", type=Path)
     run_e6_parser.add_argument("--limit", type=int)
@@ -4762,7 +4797,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     write_e7_parser = subparsers.add_parser(
         "write-e7-runbook",
-        help="write the secret-free native-MLX E7 staged operator runbook",
+        help="write the secret-free native-VLLM E7 staged operator runbook",
     )
     write_e7_parser.add_argument("output", type=Path)
     write_e7_parser.add_argument("--m1-layer", type=int, required=True)
@@ -4770,7 +4805,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     preflight_e7_runbook_parser = subparsers.add_parser(
         "preflight-e7",
-        help="verify every immutable E7 input without loading MLX",
+        help="verify every immutable E7 input without loading VLLM",
     )
     preflight_e7_runbook_parser.add_argument("runbook", type=Path)
     preflight_e7_runbook_parser.set_defaults(handler=_preflight_e7_runbook)
@@ -4784,7 +4819,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     capture_e7_parser = subparsers.add_parser(
         "capture-e7",
-        help="resume one signed E7 activation-capture partition through MLX",
+        help="resume one signed E7 activation-capture partition through VLLM",
     )
     capture_e7_parser.add_argument("runbook", type=Path)
     capture_e7_parser.add_argument("partition", choices=("T-steer", "sae-train", "sae-validation"))
@@ -4853,14 +4888,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify_e7_runbook_parser = subparsers.add_parser(
         "verify-e7-runbook",
-        help="replay E7 stage progress and its terminal package without MLX",
+        help="replay E7 stage progress and its terminal package without VLLM",
     )
     verify_e7_runbook_parser.add_argument("runbook", type=Path)
     verify_e7_runbook_parser.set_defaults(handler=_verify_e7_runbook)
 
     write_e8_parser = subparsers.add_parser(
         "write-e8-runbook",
-        help="write the secret-free native-MLX E8 staged operator runbook",
+        help="write the secret-free native-VLLM E8 staged operator runbook",
     )
     write_e8_parser.add_argument("output", type=Path)
     write_e8_parser.add_argument("--m1-layer", type=int, required=True)
@@ -4868,7 +4903,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     preflight_e8_runbook_parser = subparsers.add_parser(
         "preflight-e8",
-        help="verify every immutable E8 input without loading MLX",
+        help="verify every immutable E8 input without loading VLLM",
     )
     preflight_e8_runbook_parser.add_argument("runbook", type=Path)
     preflight_e8_runbook_parser.set_defaults(handler=_preflight_e8_runbook)
@@ -4882,7 +4917,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     capture_e8_parser = subparsers.add_parser(
         "capture-e8-activations",
-        help="resume signed protected-behavior activation capture through MLX",
+        help="resume signed protected-behavior activation capture through VLLM",
     )
     capture_e8_parser.add_argument("runbook", type=Path)
     capture_e8_parser.add_argument("--limit", type=int)
@@ -4935,7 +4970,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify_e8_runbook_parser = subparsers.add_parser(
         "verify-e8-runbook",
-        help="replay E8 stage progress and its terminal package without MLX",
+        help="replay E8 stage progress and its terminal package without VLLM",
     )
     verify_e8_runbook_parser.add_argument("runbook", type=Path)
     verify_e8_runbook_parser.set_defaults(handler=_verify_e8_runbook)
@@ -4995,7 +5030,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_e10_early_probe_parser = subparsers.add_parser(
         "run-e10-early-probe",
-        help="resume the signed native-MLX early-token capture used only to freeze M6",
+        help="resume the signed native-VLLM early-token capture used only to freeze M6",
     )
     run_e10_early_probe_parser.add_argument("output", type=Path)
     run_e10_early_probe_parser.add_argument("e8_runbook", type=Path)
@@ -5009,7 +5044,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify_e10_early_probe_parser = subparsers.add_parser(
         "verify-e10-early-probe",
-        help="replay signed early-token capture shards without loading MLX",
+        help="replay signed early-token capture shards without loading VLLM",
     )
     verify_e10_early_probe_parser.add_argument("output", type=Path)
     verify_e10_early_probe_parser.add_argument("--require-complete", action="store_true")
@@ -5087,7 +5122,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_robustness_capture_parser = subparsers.add_parser(
         "run-robustness-rq1-capture",
-        help="resume the shared signed native-MLX RQ1 fit capture",
+        help="resume the shared signed native-VLLM RQ1 fit capture",
     )
     run_robustness_capture_parser.add_argument("output", type=Path)
     run_robustness_capture_parser.add_argument("results", type=Path)
@@ -5103,7 +5138,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify_robustness_capture_parser = subparsers.add_parser(
         "verify-robustness-rq1-capture",
-        help="replay the RQ1 native fit capture without loading MLX",
+        help="replay the RQ1 native fit capture without loading VLLM",
     )
     verify_robustness_capture_parser.add_argument("output", type=Path)
     verify_robustness_capture_parser.add_argument("results", type=Path)
@@ -5121,7 +5156,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_robustness_prompts_parser = subparsers.add_parser(
         "run-robustness-prompts",
-        help="resume frozen prompt-paraphrase tasks with native MLX and graders",
+        help="resume frozen prompt-paraphrase tasks with native VLLM and graders",
     )
     run_robustness_prompts_parser.add_argument("results", type=Path)
     run_robustness_prompts_parser.add_argument("e9_runbook", type=Path)
@@ -5221,7 +5256,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     runbook_template_parser = subparsers.add_parser(
         "write-confirmatory-runbook",
-        help="write a secret-free E9/E10 native-MLX operator runbook template",
+        help="write a secret-free E9/E10 native-VLLM operator runbook template",
     )
     runbook_template_parser.add_argument("phase", choices=("E9", "E10"))
     runbook_template_parser.add_argument("output", type=Path)
@@ -5229,7 +5264,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     preflight_confirmatory_parser = subparsers.add_parser(
         "preflight-confirmatory",
-        help="replay an E9/E10 runbook without creating a ledger or loading MLX",
+        help="replay an E9/E10 runbook without creating a ledger or loading VLLM",
     )
     preflight_confirmatory_parser.add_argument("runbook", type=Path)
     preflight_confirmatory_parser.set_defaults(handler=_preflight_confirmatory)
@@ -5248,7 +5283,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_confirmatory_parser = subparsers.add_parser(
         "run-confirmatory",
-        help="resume native Qwen MLX E9/E10 generation and frozen grading",
+        help="resume native Qwen VLLM E9/E10 generation and frozen grading",
     )
     run_confirmatory_parser.add_argument("runbook", type=Path)
     run_confirmatory_parser.add_argument("--env-file", type=Path, default=Path(".env"))
@@ -5296,79 +5331,79 @@ def build_parser() -> argparse.ArgumentParser:
     transformers_snapshot_parser.add_argument("snapshot_manifest", type=Path)
     transformers_snapshot_parser.set_defaults(handler=_transformers_snapshot_preflight)
 
-    mlx_preflight_parser = subparsers.add_parser(
-        "preflight-mlx-runtime",
-        help="freeze exact M4 Max Qwen architecture and intervention evidence",
+    vllm_preflight_parser = subparsers.add_parser(
+        "preflight-vllm-runtime",
+        help="freeze exact A100 Qwen architecture and intervention evidence",
     )
-    mlx_preflight_parser.add_argument("model_config", type=Path)
-    mlx_preflight_parser.add_argument("snapshot_directory", type=Path)
-    mlx_preflight_parser.add_argument("snapshot_manifest", type=Path)
-    mlx_preflight_parser.add_argument("runtime_policy", type=Path)
-    mlx_preflight_parser.add_argument("output", type=Path)
-    mlx_preflight_parser.add_argument("--project-root", type=Path, default=Path.cwd())
-    mlx_preflight_parser.add_argument("--prompt", default="What is the capital of France?")
-    mlx_preflight_parser.add_argument("--alpha", type=float, default=2.0)
-    mlx_preflight_parser.set_defaults(handler=_mlx_hook_preflight)
+    vllm_preflight_parser.add_argument("model_config", type=Path)
+    vllm_preflight_parser.add_argument("snapshot_directory", type=Path)
+    vllm_preflight_parser.add_argument("snapshot_manifest", type=Path)
+    vllm_preflight_parser.add_argument("runtime_policy", type=Path)
+    vllm_preflight_parser.add_argument("output", type=Path)
+    vllm_preflight_parser.add_argument("--project-root", type=Path, default=Path.cwd())
+    vllm_preflight_parser.add_argument("--prompt", default="What is the capital of France?")
+    vllm_preflight_parser.add_argument("--alpha", type=float, default=2.0)
+    vllm_preflight_parser.set_defaults(handler=_vllm_hook_preflight)
 
-    e0_mlx_parser = subparsers.add_parser(
-        "run-e0-mlx",
-        help="run or resume the sole 500-question repeated native MLX leg of E0",
+    e0_vllm_parser = subparsers.add_parser(
+        "run-e0-vllm",
+        help="run or resume the sole 500-question repeated native VLLM leg of E0",
     )
-    e0_mlx_parser.add_argument("cohort", type=Path)
-    e0_mlx_parser.add_argument("reserved_source", type=Path)
-    e0_mlx_parser.add_argument("model_config", type=Path)
-    e0_mlx_parser.add_argument("snapshot_directory", type=Path)
-    e0_mlx_parser.add_argument("snapshot_manifest", type=Path)
-    e0_mlx_parser.add_argument("runtime_config", type=Path)
-    e0_mlx_parser.add_argument("work", type=Path)
-    e0_mlx_parser.add_argument("output", type=Path)
-    e0_mlx_parser.add_argument("--expected-cohort-manifest-digest", required=True)
-    e0_mlx_parser.add_argument("--parent-split-manifest-digest", required=True)
-    e0_mlx_parser.add_argument("--contamination-manifest-digest", required=True)
-    e0_mlx_parser.add_argument(
+    e0_vllm_parser.add_argument("cohort", type=Path)
+    e0_vllm_parser.add_argument("reserved_source", type=Path)
+    e0_vllm_parser.add_argument("model_config", type=Path)
+    e0_vllm_parser.add_argument("snapshot_directory", type=Path)
+    e0_vllm_parser.add_argument("snapshot_manifest", type=Path)
+    e0_vllm_parser.add_argument("runtime_config", type=Path)
+    e0_vllm_parser.add_argument("work", type=Path)
+    e0_vllm_parser.add_argument("output", type=Path)
+    e0_vllm_parser.add_argument("--expected-cohort-manifest-digest", required=True)
+    e0_vllm_parser.add_argument("--parent-split-manifest-digest", required=True)
+    e0_vllm_parser.add_argument("--contamination-manifest-digest", required=True)
+    e0_vllm_parser.add_argument(
         "--prompt-config", type=Path, default=Path("configs/prompts/primary.yaml")
     )
-    e0_mlx_parser.add_argument(
+    e0_vllm_parser.add_argument(
         "--inference-config", type=Path, default=Path("configs/experiments/core.yaml")
     )
-    e0_mlx_parser.add_argument(
+    e0_vllm_parser.add_argument(
         "--study-config", type=Path, default=Path("configs/experiments/phases.yaml")
     )
-    e0_mlx_parser.add_argument("--request-budget", type=int)
-    e0_mlx_parser.add_argument("--expected-resume-checkpoint")
-    e0_mlx_parser.add_argument("--checkpoint-file", type=Path)
-    e0_mlx_parser.set_defaults(handler=_run_e0_mlx)
+    e0_vllm_parser.add_argument("--request-budget", type=int)
+    e0_vllm_parser.add_argument("--expected-resume-checkpoint")
+    e0_vllm_parser.add_argument("--checkpoint-file", type=Path)
+    e0_vllm_parser.set_defaults(handler=_run_e0_vllm)
 
-    verify_e0_mlx_parser = subparsers.add_parser(
-        "verify-e0-mlx",
-        help="replay a completed native MLX E0 bundle against live pinned inputs",
+    verify_e0_vllm_parser = subparsers.add_parser(
+        "verify-e0-vllm",
+        help="replay a completed native VLLM E0 bundle against live pinned inputs",
     )
-    verify_e0_mlx_parser.add_argument("directory", type=Path)
-    verify_e0_mlx_parser.add_argument("cohort", type=Path)
-    verify_e0_mlx_parser.add_argument("reserved_source", type=Path)
-    verify_e0_mlx_parser.add_argument("model_config", type=Path)
-    verify_e0_mlx_parser.add_argument("snapshot_directory", type=Path)
-    verify_e0_mlx_parser.add_argument("snapshot_manifest", type=Path)
-    verify_e0_mlx_parser.add_argument("runtime_config", type=Path)
-    verify_e0_mlx_parser.add_argument("--expected-manifest-digest", required=True)
-    verify_e0_mlx_parser.add_argument("--expected-plan-identity", required=True)
-    verify_e0_mlx_parser.add_argument("--expected-cohort-manifest-digest", required=True)
-    verify_e0_mlx_parser.add_argument("--parent-split-manifest-digest", required=True)
-    verify_e0_mlx_parser.add_argument("--contamination-manifest-digest", required=True)
-    verify_e0_mlx_parser.add_argument(
+    verify_e0_vllm_parser.add_argument("directory", type=Path)
+    verify_e0_vllm_parser.add_argument("cohort", type=Path)
+    verify_e0_vllm_parser.add_argument("reserved_source", type=Path)
+    verify_e0_vllm_parser.add_argument("model_config", type=Path)
+    verify_e0_vllm_parser.add_argument("snapshot_directory", type=Path)
+    verify_e0_vllm_parser.add_argument("snapshot_manifest", type=Path)
+    verify_e0_vllm_parser.add_argument("runtime_config", type=Path)
+    verify_e0_vllm_parser.add_argument("--expected-manifest-digest", required=True)
+    verify_e0_vllm_parser.add_argument("--expected-plan-identity", required=True)
+    verify_e0_vllm_parser.add_argument("--expected-cohort-manifest-digest", required=True)
+    verify_e0_vllm_parser.add_argument("--parent-split-manifest-digest", required=True)
+    verify_e0_vllm_parser.add_argument("--contamination-manifest-digest", required=True)
+    verify_e0_vllm_parser.add_argument(
         "--prompt-config", type=Path, default=Path("configs/prompts/primary.yaml")
     )
-    verify_e0_mlx_parser.add_argument(
+    verify_e0_vllm_parser.add_argument(
         "--inference-config", type=Path, default=Path("configs/experiments/core.yaml")
     )
-    verify_e0_mlx_parser.add_argument(
+    verify_e0_vllm_parser.add_argument(
         "--study-config", type=Path, default=Path("configs/experiments/phases.yaml")
     )
-    verify_e0_mlx_parser.set_defaults(handler=_verify_e0_mlx)
+    verify_e0_vllm_parser.set_defaults(handler=_verify_e0_vllm)
 
     e0_completion_parser = subparsers.add_parser(
         "complete-e0",
-        help="promote E0 only after replayed MLX validation and human contamination review",
+        help="promote E0 only after replayed VLLM validation and human contamination review",
     )
     e0_completion_parser.add_argument("output", type=Path)
     _add_e0_completion_evidence_arguments(e0_completion_parser)
@@ -5385,7 +5420,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     finalize_e0_phase_parser = subparsers.add_parser(
         "finalize-e0-phase",
-        help="package verified native-MLX E0 outputs into the immutable phase ledger",
+        help="package verified native-VLLM E0 outputs into the immutable phase ledger",
     )
     finalize_e0_phase_parser.add_argument("output", type=Path)
     finalize_e0_phase_parser.add_argument("receipt", type=Path)

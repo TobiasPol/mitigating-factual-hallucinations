@@ -5,10 +5,10 @@ This repository implements the complete preregistered E0–E10 study in
 exact model representation:
 
 - upstream model: `Qwen/Qwen3.6-27B`;
-- MLX artifact: `mlx-community/Qwen3.6-27B-4bit`;
-- revision: `c000ac2c2057d94be3fa931000c31723aac53282`;
-- runtime: official `mlx==0.31.2` and `mlx-lm==0.31.3`;
-- target host: Apple M4 Max with 48 GiB unified memory.
+- VLLM artifact: `nvidia/Qwen3.6-27B-NVFP4`;
+- revision: `0893e1606ff3d5f97a441f405d5fc541a6bdf404`;
+- runtime: official `vllm==0.24.0` with the ModelOpt mixed-precision loader;
+- target host: Linux/x86_64 with one NVIDIA A100-SXM4 40GB (SM80).
 
 The software workflow is implemented. The active Qwen scientific experiment has
 not been executed yet. Model-generated phase results, the reviewed language
@@ -27,7 +27,7 @@ The repository provides:
 
 - immutable source snapshots, contamination review, and reviewed TriviaQA
   splits;
-- native MLX runtime validation and intervention hooks at all registered sites;
+- native VLLM runtime validation and intervention hooks at all registered sites;
 - resumable E0–E10 generation, activation, likelihood, fitting, and grading
   workflows;
 - dense, CAA, adaptive, coordinate-sparse, SAE, and protected-subspace methods;
@@ -43,30 +43,13 @@ No performance audit is part of this handoff. Bounded `--limit`,
 `--request-budget`, and checkpoint options exist to make long jobs resumable;
 they do not change the registered scientific schedule.
 
-## 1. Move the project to the M4 Max
+## 1. Move the project to the Vast.ai A100 host
 
-The `artifacts/` directory is intentionally ignored by Git. A normal clone is
-not enough: transfer the existing model-independent source, split, contamination,
-and grader artifacts separately, preserving file bytes and permissions. Do not
-copy prior model runs into the new Qwen study namespace.
-
-Transfer only the active inputs by copying the Git working tree plus these
-paths:
-
-```text
-artifacts/contamination/triviaqa-ood/
-artifacts/contamination/triviaqa-ood-manual-review/
-artifacts/contamination/triviaqa-ood-manual-review-result/
-artifacts/e0/runtime-validation-500/
-artifacts/graders/e1-frozen-v2/
-artifacts/graders/openrouter/
-artifacts/models/semantic/
-artifacts/questions/
-artifacts/source/
-artifacts/splits/triviaqa-auto-clean/
-artifacts/splits/triviaqa-reviewed/
-artifacts/studies/qwen36-27b-mlx4-m4max48-v1/frozen/E5-controller-splits/
-```
+Start from the Git working tree only. The active amendment intentionally rejects
+the prior MLX run and does not require any old `artifacts/` directory. All source
+snapshots, canonical questions, contamination evidence, reviewed splits, grader
+bundles, and Qwen outputs are generated fresh on the A100 host under the new
+study namespace.
 
 Transfer `.env` and private keys over a protected channel, or recreate them on
 the target. Never commit them. After transfer:
@@ -78,8 +61,16 @@ chmod 600 .env 2>/dev/null || true
 
 ## 2. Install the exact environment
 
-Install Xcode and the matching Metal Toolchain first. Then install current
-`pyenv` and `uv`, and run:
+Choose a Linux/x86_64 Vast.ai instance with one A100-SXM4 40GB, at least 64 GB
+of system RAM, and at least 100 GB of persistent disk. Confirm that the NVIDIA
+driver can see the exact GPU before installing the project:
+
+```bash
+nvidia-smi --query-gpu=name,memory.total,compute_cap --format=csv,noheader
+# Expected: an NVIDIA A100 with about 40960 MiB and compute capability 8.0.
+```
+
+Install current `pyenv` and `uv`, then run:
 
 ```bash
 # CPython 3.11.14 is no longer in uv's downloadable Python catalog. Install the
@@ -88,24 +79,23 @@ pyenv install --skip-existing 3.11.14
 pyenv local 3.11.14
 python --version  # must print Python 3.11.14
 
-uv sync --extra dev --extra research --extra mlx-macos
+uv sync --extra dev --extra research --extra cuda-a100
 uv lock --check
 uv run hf version
 ```
 
-Do not replace 3.11.14 with the newest 3.11 patch: the runtime policy and frozen
-artifacts require this exact interpreter. If `uv` reports `No download found for
-request: cpython-3.11.14`, it is being asked to install a version no longer in its
-catalog; use the `pyenv` commands above. If `uv` still resolves to an older
-`~/.local/bin/uv`, remove that stale installation or put the current `uv` earlier
-on `PATH`.
+Do not replace 3.11.14 within an active run: the live receipt records the exact
+interpreter and later phases require the same runtime identity. If `uv` cannot
+download that patch release, use the `pyenv` commands above.
 
 `hf` is the current Hugging Face Hub CLI (`huggingface-cli` is deprecated). The
 locked research extra supplies it, and it reads `HF_TOKEN` from the environment.
 
-The lock file and runtime policy pin the scientific dependency versions. Do not
-upgrade MLX, MLX-LM, Transformers, Torch, NumPy, the tokenizer, or the model
-revision within this study namespace.
+The lock file and runtime policy pin the scientific dependency versions. In
+particular, keep `vllm==0.24.0`: v0.23.0 rejected ModelOpt mixed checkpoints on
+SM80, while v0.24.0 provides the documented A100 Marlin fallback. Do not upgrade
+vLLM, Transformers, Torch, NumPy, the tokenizer, or the model revision within
+this study namespace.
 
 Run the repository checks before downloading or loading Qwen:
 
@@ -129,8 +119,8 @@ From the repository root:
 
 ```bash
 export REPO="$PWD"
-export STUDY="$REPO/artifacts/studies/qwen36-27b-mlx4-m4max48-v1"
-export MODEL="$REPO/artifacts/models/qwen3.6-27b-mlx-4bit/c000ac2c2057d94be3fa931000c31723aac53282"
+export STUDY="$REPO/artifacts/studies/qwen36-27b-nvfp4-a10040-v1"
+export MODEL="$REPO/artifacts/models/qwen3.6-27b-nvfp4/0893e1606ff3d5f97a441f405d5fc541a6bdf404"
 
 mkdir -p \
   "$STUDY"/{operator-inputs,secrets,private,frozen,work,outputs,runs,evidence,checkpoints,analysis,audit,final,runtime,auxiliary}
@@ -178,84 +168,81 @@ chmod 600 "$STUDY/private/human-audit.key"
 No experiment command downloads model weights implicitly.
 
 ```bash
-uv run hf download mlx-community/Qwen3.6-27B-4bit \
-  --revision c000ac2c2057d94be3fa931000c31723aac53282 \
+uv run hf download nvidia/Qwen3.6-27B-NVFP4 \
+  --revision 0893e1606ff3d5f97a441f405d5fc541a6bdf404 \
   --local-dir "$MODEL"
 
 # Preserve hf's resumable local-dir metadata outside the immutable snapshot.
 mv "$MODEL/.cache" "$STUDY/private/qwen-hf-download-cache"
 
 uv run mfh verify-transformers-snapshot \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml \
+  configs/models/qwen3.6-27b-nvfp4.yaml \
   "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json
 ```
 
-The verified directory must contain exactly the 16 files declared by the
+The verified directory must contain exactly the 17 files declared by the
 snapshot manifest, without symlinks.
 
-Run the write-once live MLX preflight:
+Run the write-once live VLLM preflight:
 
 ```bash
-uv run mfh preflight-mlx-runtime \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml \
+uv run mfh preflight-vllm-runtime \
+  configs/models/qwen3.6-27b-nvfp4.yaml \
   "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  configs/runtimes/qwen3.6-27b-mlx-4bit-policy.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  configs/runtimes/qwen3.6-27b-nvfp4-policy.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   --project-root .
 ```
 
 This verifies the exact host, package and source hashes, model class, layer-type
-sequence, deterministic no-thinking prompt rendering, cached and uncached
-zero-vector parity, prompt-token scope, and intervention sensitivity. Do not edit
+sequence, deterministic no-thinking prompt rendering, zero-vector parity,
+prompt-token scope, exact additive edits, and downstream log-probability
+sensitivity. Do not edit
 a failed receipt. Diagnose the host and create a reviewed new namespace if the
 registered environment cannot pass.
 
-## 5. Confirm the transferred data inputs
+## 5. Generate the fresh model-independent inputs
 
-The existing contamination review and reviewed TriviaQA splits are
-model-independent and may be reused byte-for-byte. Replay them before E0. The
-full commands and frozen digests are in
+Follow the acquisition, canonicalization, contamination, blinded review, split,
+runtime-cohort, and grader-freeze commands in
 [`docs/operator-guide.md`](docs/operator-guide.md#4-acquire-and-freeze-external-inputs).
-
-At minimum, verify:
-
-```bash
-uv run mfh verify-runtime-validation \
-  artifacts/e0/runtime-validation-500 \
-  artifacts/splits/triviaqa-auto-clean/reserved.jsonl \
-  --expected-manifest-digest bb89b2da16d899f8a38c0b090f84d1e43ffd1132e0fe0693295230b804f44442 \
-  --parent-split-manifest-digest a3b646d7057c3e863c06b7ed0f446a28c63b8fb12e203e9b6b61cb2f2f8027f0 \
-  --contamination-manifest-digest ae79350a5e2f6310fccec4b91e9ef55821996f1797baacb21fb7de3d7b6131f2
-
-uv run mfh verify-reviewed-splits \
-  artifacts/splits/triviaqa-reviewed \
-  artifacts/contamination/triviaqa-ood-manual-review-result \
-  artifacts/contamination/triviaqa-ood-manual-review \
-  artifacts/contamination/triviaqa-ood \
-  configs/contamination/triviaqa-ood.yaml \
-  artifacts/models/semantic/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41 \
-  artifacts/questions/triviaqa-canonical.jsonl \
-  --target artifacts/questions/simpleqa_verified-canonical.jsonl \
-  --target artifacts/questions/aa_omniscience_public_600-canonical.jsonl \
-  --expected-contamination-manifest-digest ae79350a5e2f6310fccec4b91e9ef55821996f1797baacb21fb7de3d7b6131f2 \
-  --expected-review-result-manifest-digest 6e03e98d9b09ee83fcfbbe5d1268ef42d2991467db043ecc345de84f64607f59 \
-  --expected-review-queue-manifest-digest 02f12825cb2b362b0bbbdde378f2018c15a0859d262bcbf3df2fb4ac9bfd02d6 \
-  --expected-split-manifest-digest 05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148 \
-  --steer 30000 --controller 5000 --dev 5000 --test 5000 --seed 17
-
-uv run mfh verify-e1-graders artifacts/graders/e1-frozen-v2 \
-  --expected-manifest-digest b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159
-```
+Do not reuse the digests from the retired MLX study. Each build command prints a
+new manifest digest; pass that exact value to its corresponding verifier and to
+the next dependent command. E0 cannot complete until the new top-200 blinded
+contamination worksheet has been manually reviewed and frozen.
 
 Before E7/E8, also produce two required side-effect inputs:
 
 1. Materialize the pinned IFEval evaluator:
 
    ```bash
+   # Bootstrap artifacts used only to build the self-contained evaluator.
+   export IFEVAL_BOOTSTRAP="$HOME/.local/share/mfh"
+   export IFEVAL_PYTHON="$IFEVAL_BOOTSTRAP/cpython-3.11.14+20260211-x86_64-unknown-linux-gnu-stripped"
+   mkdir -p "$IFEVAL_BOOTSTRAP" "$IFEVAL_PYTHON"
+
+   curl -L --fail \
+     https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.11.14%2B20260211-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz \
+     -o "$IFEVAL_BOOTSTRAP/cpython-3.11.14-linux.tar.gz"
+   echo "1fb6a89daa750f7eff00eb65d901c3c236713812eb9c8c7e07ecdfcd78203c8e  $IFEVAL_BOOTSTRAP/cpython-3.11.14-linux.tar.gz" | sha256sum --check
+   tar -xzf "$IFEVAL_BOOTSTRAP/cpython-3.11.14-linux.tar.gz" \
+     -C "$IFEVAL_PYTHON" --strip-components=1
+
+   curl -L --fail \
+     https://github.com/astral-sh/uv/releases/download/0.11.28/uv-x86_64-unknown-linux-gnu.tar.gz \
+     -o "$IFEVAL_BOOTSTRAP/uv-0.11.28-linux.tar.gz"
+   echo "e490a6464492183c5d4534a5527fb4440f7f2bb2f228162ad7e4afe076dc0224  $IFEVAL_BOOTSTRAP/uv-0.11.28-linux.tar.gz" | sha256sum --check
+   tar -xzf "$IFEVAL_BOOTSTRAP/uv-0.11.28-linux.tar.gz" -C "$IFEVAL_BOOTSTRAP"
+   export PATH="$IFEVAL_BOOTSTRAP/uv-x86_64-unknown-linux-gnu:$PATH"
+   uv --version  # must print uv 0.11.28 (x86_64-unknown-linux-gnu)
+
    uv run mfh materialize-ifeval-evaluator "$STUDY/frozen/ifeval-evaluator"
    ```
+
+   The materializer verifies the exact standalone CPython and `uv` bytes, then
+   packages a symlink-free Linux/x86_64 Python 3.11.14 evaluator runtime.
 
 2. Build the 500-row, five-language suite from human-reviewed translations and
    two independent reviewer signatures:
@@ -279,7 +266,7 @@ signed language reviews, the frozen IFEval evaluator, and the registered bytes
 of all six raw sources before and after copying:
 
 ```bash
-export SPLIT_MANIFEST_DIGEST="05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
+export SPLIT_MANIFEST_DIGEST="REPLACE_WITH_FRESH_REVIEWED_SPLIT_DIGEST"
 export TRIVIAQA_SOURCE="$REPO/artifacts/source/triviaqa/d2ff7f468d3642dbd33123596331950db8a63d0e/rc.nocontext/train-00000-of-00001-e93ee6c1ba181971.parquet"
 export SIMPLEQA_SOURCE="$REPO/artifacts/source/simpleqa-verified/0dc97e0d28d8233463e005cdc4475cc2a13ba2dc/simpleqa_verified.csv"
 export AA_SOURCE="$REPO/artifacts/source/aa-omniscience/4a8ffc87c4650054825fb767fe0da4a4fc97ff32/AA-Omniscience_dataset_public.csv"
@@ -292,7 +279,7 @@ export E7_E8_INPUTS="$STUDY/frozen/E7-E8-external-inputs"
 
 uv run mfh stage-e7-e8-inputs \
   "$E7_E8_INPUTS" \
-  "$REPO/artifacts/splits/triviaqa-reviewed" \
+  "$SPLITS" \
   "$STUDY/frozen/language-suite" \
   "$STUDY/frozen/ifeval-evaluator" \
   --triviaqa-source "$TRIVIAQA_SOURCE" \
@@ -323,7 +310,7 @@ deliberately confined to `$STUDY`.
 - A bounded run is resumed by rerunning the identical command. Do not delete
   shards or edit checkpoint JSON.
 - After a model-heavy command, let the process exit before SAE fitting or another
-  model load so MLX releases unified memory.
+  model load so vLLM releases GPU memory.
 - `verify-*` and `preflight-*` commands are read-only unless their help explicitly
   says they materialize an artifact.
 - A falsified scientific gate is a valid terminal result. Do not tune past it in
@@ -346,8 +333,8 @@ the exact command blocks in these operator-guide sections in order:
 1. [E0 runtime validation and Qwen admission](docs/operator-guide.md#4-acquire-and-freeze-external-inputs)
 2. [Scientific lifecycle and confirmatory freezes](docs/operator-guide.md#5-scientific-phase-lifecycle)
 3. [E0–E10 execution map and E3 operator](docs/operator-guide.md#6-e0e10-execution-map)
-4. [Native M2 CAA](docs/operator-guide.md#61-build-the-native-mlx-m2-caa-artifact)
-5. [Native E4 screen](docs/operator-guide.md#62-run-the-native-mlx-e4-baseline-screen)
+4. [Native M2 CAA](docs/operator-guide.md#61-build-the-native-vllm-m2-caa-artifact)
+5. [Native E4 screen](docs/operator-guide.md#62-run-the-native-vllm-e4-baseline-screen)
 6. [E5 controller capture, fitting, ablation, selection, and phase promotion](docs/operator-guide.md#63-capture-the-native-e5-controller-fitting-tensors)
 7. [AA official auxiliary track](docs/operator-guide.md#64-run-the-auxiliary-aa-official-track)
 
@@ -375,19 +362,23 @@ valid falsification outcome.
 ### E0 exact ledger finalization
 
 The operator-guide E0 section runs the native 500-row validation and creates
-`$STUDY/outputs/E0-completion`. Record the four identities printed by the MLX,
+`$STUDY/outputs/E0-completion`. Record the four identities printed by the VLLM,
 manual-review, and completion commands, then publish the actual E0 phase ledger:
 
 ```bash
-export E0_MLX_MANIFEST_DIGEST="REPLACE_WITH_E0_MLX_MANIFEST_DIGEST"
-export E0_MLX_PLAN_IDENTITY="REPLACE_WITH_E0_MLX_PLAN_IDENTITY"
+export E0_VLLM_MANIFEST_DIGEST="REPLACE_WITH_E0_VLLM_MANIFEST_DIGEST"
+export E0_VLLM_PLAN_IDENTITY="REPLACE_WITH_E0_VLLM_PLAN_IDENTITY"
 export REVIEW_RESULT_DIGEST="REPLACE_WITH_REVIEW_RESULT_DIGEST"
 export E0_COMPLETION_DIGEST="REPLACE_WITH_E0_COMPLETION_MANIFEST_DIGEST"
+export SPLITS="$STUDY/frozen/reviewed-splits"
+export E1_GRADERS="$STUDY/frozen/E1-graders"
+export SPLIT_MANIFEST_DIGEST="REPLACE_WITH_FRESH_REVIEWED_SPLIT_DIGEST"
+export GRADER_MANIFEST_DIGEST="REPLACE_WITH_FRESH_GRADER_MANIFEST_DIGEST"
 
 uv run mfh finalize-e0-phase \
   "$STUDY/runs/E0" \
   "$STUDY/outputs/E0-completion" \
-  "$STUDY/outputs/E0-mlx" \
+  "$STUDY/outputs/E0-vllm" \
   artifacts/contamination/triviaqa-ood-manual-review-result \
   artifacts/contamination/triviaqa-ood-manual-review \
   artifacts/contamination/triviaqa-ood \
@@ -396,20 +387,24 @@ uv run mfh finalize-e0-phase \
   artifacts/questions/triviaqa-canonical.jsonl \
   artifacts/e0/runtime-validation-500 \
   artifacts/splits/triviaqa-auto-clean/reserved.jsonl \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml \
+  configs/models/qwen3.6-27b-nvfp4.yaml \
   "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
+  "$E1_GRADERS" \
+  "$SPLITS" \
   --expected-manifest-digest "$E0_COMPLETION_DIGEST" \
   --target artifacts/questions/simpleqa_verified-canonical.jsonl \
   --target artifacts/questions/aa_omniscience_public_600-canonical.jsonl \
-  --expected-mlx-manifest-digest "$E0_MLX_MANIFEST_DIGEST" \
-  --expected-mlx-plan-identity "$E0_MLX_PLAN_IDENTITY" \
+  --expected-vllm-manifest-digest "$E0_VLLM_MANIFEST_DIGEST" \
+  --expected-vllm-plan-identity "$E0_VLLM_PLAN_IDENTITY" \
   --expected-review-result-manifest-digest "$REVIEW_RESULT_DIGEST" \
-  --expected-review-queue-manifest-digest 02f12825cb2b362b0bbbdde378f2018c15a0859d262bcbf3df2fb4ac9bfd02d6 \
-  --expected-cohort-manifest-digest bb89b2da16d899f8a38c0b090f84d1e43ffd1132e0fe0693295230b804f44442 \
-  --parent-split-manifest-digest a3b646d7057c3e863c06b7ed0f446a28c63b8fb12e203e9b6b61cb2f2f8027f0 \
-  --contamination-manifest-digest ae79350a5e2f6310fccec4b91e9ef55821996f1797baacb21fb7de3d7b6131f2
+  --expected-review-queue-manifest-digest "$REVIEW_QUEUE_MANIFEST_DIGEST" \
+  --expected-cohort-manifest-digest "$E0_COHORT_MANIFEST_DIGEST" \
+  --parent-split-manifest-digest "$AUTO_CLEAN_SPLIT_MANIFEST_DIGEST" \
+  --contamination-manifest-digest "$CONTAMINATION_MANIFEST_DIGEST" \
+  --expected-grader-manifest-digest "$GRADER_MANIFEST_DIGEST" \
+  --expected-reviewed-split-manifest-digest "$SPLIT_MANIFEST_DIGEST"
 
 uv run mfh phase-progress \
   "$STUDY/runs/E0" configs/experiments/phases.yaml
@@ -428,10 +423,10 @@ digests below are the externally recorded identities of the transferred,
 already-reviewed inputs.
 
 ```bash
-export SPLITS="artifacts/splits/triviaqa-reviewed"
-export E1_GRADERS="artifacts/graders/e1-frozen-v2"
-export SPLIT_MANIFEST_DIGEST="05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
-export GRADER_MANIFEST_DIGEST="b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159"
+export SPLITS="$STUDY/frozen/reviewed-splits"
+export E1_GRADERS="$STUDY/frozen/E1-graders"
+export SPLIT_MANIFEST_DIGEST="REPLACE_WITH_FRESH_REVIEWED_SPLIT_DIGEST"
+export GRADER_MANIFEST_DIGEST="REPLACE_WITH_FRESH_GRADER_MANIFEST_DIGEST"
 export E1_WORK="$STUDY/work/E1"
 export E1_LEDGER="$STUDY/runs/E1"
 export E1_OUTPUT="$STUDY/frozen/E1-outputs"
@@ -442,12 +437,12 @@ as complete. Preparation re-authorizes the human-reviewed split against all
 live contamination evidence:
 
 ```bash
-uv run mfh prepare-e1-mlx \
+uv run mfh prepare-e1-vllm \
   "$SPLITS" "$E1_GRADERS" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml \
+  configs/models/qwen3.6-27b-nvfp4.yaml \
   "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E1_WORK" "$E1_LEDGER" "$STUDY/runs/E0" \
   artifacts/contamination/triviaqa-ood-manual-review-result \
   artifacts/contamination/triviaqa-ood-manual-review \
@@ -459,9 +454,9 @@ uv run mfh prepare-e1-mlx \
   --target artifacts/questions/aa_omniscience_public_600-canonical.jsonl \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-grader-manifest-digest "$GRADER_MANIFEST_DIGEST" \
-  --expected-contamination-manifest-digest ae79350a5e2f6310fccec4b91e9ef55821996f1797baacb21fb7de3d7b6131f2 \
-  --expected-review-result-manifest-digest 6e03e98d9b09ee83fcfbbe5d1268ef42d2991467db043ecc345de84f64607f59 \
-  --expected-review-queue-manifest-digest 02f12825cb2b362b0bbbdde378f2018c15a0859d262bcbf3df2fb4ac9bfd02d6 \
+  --expected-contamination-manifest-digest "$CONTAMINATION_MANIFEST_DIGEST" \
+  --expected-review-result-manifest-digest "$REVIEW_RESULT_DIGEST" \
+  --expected-review-queue-manifest-digest "$REVIEW_QUEUE_MANIFEST_DIGEST" \
   --steer 30000 --controller 5000 --dev 5000 --test 5000 --seed 17
 ```
 
@@ -470,22 +465,22 @@ session, use the second command verbatim until generation progress is complete.
 The external checkpoint is deliberately outside the work and ledger bundles.
 
 ```bash
-uv run mfh run-e1-mlx \
+uv run mfh run-e1-vllm \
   "$SPLITS" "$E1_GRADERS" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E1_WORK" "$E1_LEDGER" "$STUDY/runs/E0" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-grader-manifest-digest "$GRADER_MANIFEST_DIGEST" \
   --checkpoint-file "$STUDY/checkpoints/E1-generation.json" \
   --request-budget 64
 
-uv run mfh run-e1-mlx \
+uv run mfh run-e1-vllm \
   "$SPLITS" "$E1_GRADERS" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E1_WORK" "$E1_LEDGER" "$STUDY/runs/E0" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-grader-manifest-digest "$GRADER_MANIFEST_DIGEST" \
@@ -500,9 +495,9 @@ or interrupted provider sessions:
 ```bash
 uv run mfh grade-e1-openrouter \
   "$SPLITS" "$E1_GRADERS" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E1_WORK" "$E1_LEDGER" "$STUDY/runs/E0" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-grader-manifest-digest "$GRADER_MANIFEST_DIGEST" \
@@ -511,9 +506,9 @@ uv run mfh grade-e1-openrouter \
 
 uv run mfh grade-e1-openrouter \
   "$SPLITS" "$E1_GRADERS" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E1_WORK" "$E1_LEDGER" "$STUDY/runs/E0" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-grader-manifest-digest "$GRADER_MANIFEST_DIGEST" \
@@ -527,9 +522,9 @@ Freeze the labels, reporting gates, and prompt metrics. Record the printed
 ```bash
 uv run mfh finalize-e1 \
   "$SPLITS" "$E1_GRADERS" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E1_WORK" "$E1_LEDGER" "$STUDY/runs/E0" "$E1_OUTPUT" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-grader-manifest-digest "$GRADER_MANIFEST_DIGEST"
@@ -543,8 +538,8 @@ uv run mfh verify-e1-outputs \
 ### E2 exact capture and probe commands
 
 E2 is fully local. It reuses E1's frozen records and captures 21,600 registered
-prompt-end feature rows. Keep the model loaded only for `run-e2-mlx`; the probe
-fit runs after that command exits and releases MLX memory.
+prompt-end feature rows. Keep the model loaded only for `run-e2-vllm`; the probe
+fit runs after that command exits and releases VLLM memory.
 
 ```bash
 export E2_WORKSPACE="$STUDY/work/E2-workspace"
@@ -553,11 +548,11 @@ export E2_PROBES="$STUDY/frozen/E2-probes"
 export E2_PROBE_WORK="$STUDY/work/E2-probe-fit"
 export E2_PHASE="$STUDY/runs/E2"
 
-uv run mfh prepare-e2-mlx \
+uv run mfh prepare-e2-vllm \
   "$SPLITS" "$E1_OUTPUT" "$E1_WORK" "$E1_LEDGER" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E2_WORKSPACE" "$E2_CAPTURE" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-e1-manifest-digest "$E1_MANIFEST_DIGEST" \
@@ -568,11 +563,11 @@ Record the printed `workspace_plan_identity`. Repeat the run command until the
 verifier reports `rows_completed: 21600` and `complete: true`:
 
 ```bash
-uv run mfh run-e2-mlx \
+uv run mfh run-e2-vllm \
   "$SPLITS" "$E1_OUTPUT" "$E1_WORK" "$E1_LEDGER" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E2_WORKSPACE" "$E2_CAPTURE" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-e1-manifest-digest "$E1_MANIFEST_DIGEST" \
@@ -580,9 +575,9 @@ uv run mfh run-e2-mlx \
 
 uv run mfh verify-e2-capture \
   "$SPLITS" "$E1_OUTPUT" "$E1_WORK" "$E1_LEDGER" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E2_WORKSPACE" "$E2_CAPTURE" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-e1-manifest-digest "$E1_MANIFEST_DIGEST" \
@@ -595,9 +590,9 @@ record its `manifest_digest`, and verify the full bundle:
 ```bash
 uv run mfh fit-e2-probes \
   "$SPLITS" "$E1_OUTPUT" "$E1_WORK" "$E1_LEDGER" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E2_WORKSPACE" "$E2_CAPTURE" "$E2_PROBES" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-e1-manifest-digest "$E1_MANIFEST_DIGEST" \
@@ -616,9 +611,9 @@ export E2_PROBE_MANIFEST_DIGEST="REPLACE_WITH_FIT_E2_PROBE_MANIFEST_DIGEST"
 
 uv run mfh finalize-e2 \
   "$SPLITS" "$E1_OUTPUT" "$E1_WORK" "$E1_LEDGER" \
-  configs/models/qwen3.6-27b-mlx-4bit.yaml "$MODEL" \
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json \
-  "$STUDY/frozen/mlx-preflight.json" \
+  configs/models/qwen3.6-27b-nvfp4.yaml "$MODEL" \
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json \
+  "$STUDY/frozen/vllm-preflight.json" \
   "$E2_WORKSPACE" "$E2_CAPTURE" "$E2_PROBES" "$E2_PHASE" \
   --expected-split-manifest-digest "$SPLIT_MANIFEST_DIGEST" \
   --expected-e1-manifest-digest "$E1_MANIFEST_DIGEST" \
@@ -640,7 +635,7 @@ raw source bytes, and a replayable manifest; it does not load Qwen:
 export E6_QUESTIONS="$STUDY/frozen/E6-questions"
 
 uv run mfh freeze-e6-questions \
-  "$E6_QUESTIONS" "$REPO/artifacts/splits/triviaqa-reviewed" \
+  "$E6_QUESTIONS" "$SPLITS" \
   --triviaqa-source "$TRIVIAQA_SOURCE" \
   --simpleqa-source "$SIMPLEQA_SOURCE" \
   --aa-source "$AA_SOURCE" \
@@ -661,7 +656,10 @@ prevents a stale illustrative layer from entering E6:
 
 ```bash
 export E6_RUNBOOK="$STUDY/operator-inputs/E6-runbook.json"
-uv run mfh write-e6-runbook "$E6_RUNBOOK" --m1-layer "$M1_LAYER"
+uv run mfh write-e6-runbook "$E6_RUNBOOK" \
+  --m1-layer "$M1_LAYER" \
+  --official-grader-bundle "$E1_GRADERS" \
+  --expected-grader-manifest-digest "$GRADER_MANIFEST_DIGEST"
 ```
 
 At that exact runbook location, the generated relative paths resolve to:
@@ -670,7 +668,7 @@ At that exact runbook location, the generated relative paths resolve to:
 | --- | --- |
 | `snapshot_directory` | `$MODEL` (immutable repository model; manifest-verified) |
 | `frozen_question_bundle` | `$STUDY/frozen/E6-questions` |
-| `official_grader_bundle` | `$REPO/artifacts/graders/e1-frozen-v2` |
+| `official_grader_bundle` | `$E1_GRADERS` (recorded relative to the runbook) |
 | `e3_static_vectors` | `$STUDY/E3-operator/vectors` |
 | `e5_adaptive_controllers` | `$STUDY/frozen/E5-phase/selected-controller` |
 | `prerequisite_runs.E3` | `$STUDY/E3-operator/phase` (custom seven-stage terminal) |
@@ -927,7 +925,7 @@ uv run mfh verify-robustness-results \
 ## 12. Run E9
 
 The previous section already created and preflighted the secret-free E9
-runbook. Create the ledger, then resume bounded native MLX/OpenRouter sessions:
+runbook. Create the ledger, then resume bounded native VLLM/OpenRouter sessions:
 
 ```bash
 uv run mfh prepare-confirmatory "$E9_RUNBOOK"
@@ -1163,7 +1161,7 @@ Common failures:
 The full experiment is complete only when all of the following hold:
 
 - repository lint, strict typing, and tests pass;
-- the exact Qwen snapshot and M4 Max live preflight verify;
+- the exact Qwen snapshot and A100 live preflight verify;
 - E0–E9 each have a replayable completion or registered falsification artifact;
 - E10 has consumed one reservation and has a terminal completion/falsification;
 - all robustness tasks are complete and the result store verifies;

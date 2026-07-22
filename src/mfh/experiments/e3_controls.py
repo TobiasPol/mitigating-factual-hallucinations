@@ -28,18 +28,18 @@ from mfh.experiments.e3_construction import (
 from mfh.experiments.e3_schedule import E3OperatingPoint, E3Protocol
 from mfh.experiments.e3_selection import VerifiedE3StageSelection
 from mfh.experiments.model_selection import validate_active_study_artifact_paths
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxTeacherForcedCubeOutput,
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmTeacherForcedCubeOutput,
 )
-from mfh.inference.mlx_runtime import MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmRenderedPrompt
 from mfh.provenance import sha256_file, stable_hash
 
 _SHA256 = frozenset("0123456789abcdef")
 _EXTRACTIONS = ("M1-R", "M1-P")
 _LABELS = (Outcome.CORRECT, Outcome.INCORRECT)
 _INVENTORY = frozenset({"plan.json", "sessions.jsonl", "checkpoints"})
-_UNIFIED_MEMORY_BYTES = 51_539_607_552
+_UNIFIED_MEMORY_BYTES = 42_949_672_960
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -62,24 +62,24 @@ class E3ShuffleRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput: ...
+    ) -> VllmPromptFeatureCubeOutput: ...
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxTeacherForcedCubeOutput: ...
+    ) -> VllmTeacherForcedCubeOutput: ...
 
     def runtime_identity(self) -> Mapping[str, Any]: ...
 
@@ -87,8 +87,8 @@ class E3ShuffleRuntime(Protocol):
 @dataclass(slots=True)
 class _ShuffleAccumulator:
     processed_rows: int
-    counts: np.ndarray
-    sums: np.ndarray
+    counts: np.ndarray[Any, Any]
+    sums: np.ndarray[Any, Any]
     maximum_peak_memory_bytes: int
     wall_time_seconds: float
 
@@ -676,11 +676,11 @@ def _lock(path: Path) -> Iterator[None]:
 def _observation(
     *,
     runtime: E3ShuffleRuntime,
-    rendered: MlxRenderedPrompt,
+    rendered: VllmRenderedPrompt,
     response: str,
     points: Mapping[str, E3OperatingPoint],
     width: int,
-) -> tuple[Mapping[str, np.ndarray], int]:
+) -> tuple[Mapping[str, np.ndarray[Any, Any]], int]:
     layers = tuple(dict.fromkeys(point.layer for point in points.values()))
     prompt = runtime.prompt_feature_cube(
         rendered, layers=layers, sites=(ActivationSite.POST_MLP,)
@@ -690,7 +690,7 @@ def _observation(
     )
     if teacher.response_text_sha256 != hashlib.sha256(response.encode()).hexdigest():
         raise DataValidationError("E3 shuffled response cube differs from journal")
-    values: dict[str, np.ndarray] = {}
+    values: dict[str, np.ndarray[Any, Any]] = {}
     for name, point in points.items():
         raw = np.asarray(
             (

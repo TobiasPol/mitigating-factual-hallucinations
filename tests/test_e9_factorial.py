@@ -99,7 +99,7 @@ def _prompts() -> dict[str, PromptSpec]:
 def _build(questions: dict[str, tuple[Question, ...]]) -> PhaseRunContract:
     study = load_study_protocol(ROOT / "configs/experiments/phases.yaml")
     phase = study.phase("E9")
-    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml")
+    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml")
     prompts = _prompts()
     return build_e9_contract(
         study=study,

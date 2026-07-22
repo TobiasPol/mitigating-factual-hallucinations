@@ -99,7 +99,7 @@ def test_synthetic_bundle_is_not_a_scientific_phase_ledger(tmp_path: Path) -> No
     run_synthetic_study(directory)
     study = load_study_protocol(_ROOT / "configs" / "experiments" / "phases.yaml")
 
-    with pytest.raises(ConfigurationError, match="qwen36-27b-mlx4-m4max48-v1"):
+    with pytest.raises(ConfigurationError, match="qwen36-27b-nvfp4-a10040-v1"):
         PhaseRunLedger.open(directory, study=study)
 
 

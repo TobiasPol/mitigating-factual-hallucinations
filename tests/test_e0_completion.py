@@ -19,11 +19,13 @@ from mfh.experiments.e0_completion import (
     write_e0_completion_receipt,
 )
 
-_MLX_DIGEST = "a" * 64
-_MLX_PLAN = "e" * 64
+_VLLM_DIGEST = "a" * 64
+_VLLM_PLAN = "e" * 64
 _REVIEW_DIGEST = "b" * 64
 _QUEUE_DIGEST = "c" * 64
 _COHORT_DIGEST = "d" * 64
+_GRADER_DIGEST = "f" * 64
+_SPLIT_DIGEST = "1" * 64
 
 
 def test_e0_completion_capability_cannot_be_caller_constructed(tmp_path: Path) -> None:
@@ -58,10 +60,10 @@ def _inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, 
         json.dumps({"manual_overlap_source_ids": ["source-700"]}) + "\n",
         encoding="utf-8",
     )
-    mlx = tmp_path / "mlx"
-    mlx.mkdir()
+    vllm = tmp_path / "vllm"
+    vllm.mkdir()
 
-    def verified_mlx(*_args: object, **_kwargs: object) -> dict[str, Any]:
+    def verified_vllm(*_args: object, **_kwargs: object) -> dict[str, Any]:
         return {
             "scientific_status": {"e0_runtime_validation_complete": True},
         }
@@ -79,13 +81,29 @@ def _inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, 
             },
         }
 
-    monkeypatch.setattr(completion_module, "verify_mlx_e0_bundle", verified_mlx)
+    monkeypatch.setattr(completion_module, "verify_vllm_e0_bundle", verified_vllm)
     monkeypatch.setattr(completion_module, "verify_contamination_review_result", verified_review)
+    monkeypatch.setattr(
+        completion_module,
+        "verify_e1_grader_bundle",
+        lambda *_args, **_kwargs: {"grader_fingerprints": {"grader": "2" * 64}},
+    )
+    monkeypatch.setattr(
+        completion_module,
+        "verify_reviewed_split_bundle",
+        lambda *_args, **_kwargs: {"manifest_digest": _SPLIT_DIGEST},
+    )
+    grader_bundle = tmp_path / "graders"
+    grader_bundle.mkdir()
+    (grader_bundle / "evidence").write_text("grader", encoding="utf-8")
+    reviewed_splits = tmp_path / "reviewed-splits"
+    reviewed_splits.mkdir()
+    (reviewed_splits / "evidence").write_text("splits", encoding="utf-8")
     values = {
-        "mlx_directory": mlx,
-        "expected_mlx_manifest_digest": _MLX_DIGEST,
-        "expected_mlx_plan_identity": _MLX_PLAN,
-        "mlx_inputs": {
+        "vllm_directory": vllm,
+        "expected_vllm_manifest_digest": _VLLM_DIGEST,
+        "expected_vllm_plan_identity": _VLLM_PLAN,
+        "vllm_inputs": {
             "cohort_directory": cohort,
             "expected_cohort_manifest_digest": _COHORT_DIGEST,
         },
@@ -94,6 +112,10 @@ def _inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, 
         "review_queue_directory": tmp_path / "queue",
         "expected_review_queue_manifest_digest": _QUEUE_DIGEST,
         "review_inputs": {},
+        "grader_bundle": grader_bundle,
+        "expected_grader_manifest_digest": _GRADER_DIGEST,
+        "reviewed_splits": reviewed_splits,
+        "expected_reviewed_split_manifest_digest": _SPLIT_DIGEST,
     }
     return values, cohort, review
 

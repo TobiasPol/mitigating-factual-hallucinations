@@ -43,7 +43,7 @@ from mfh.experiments.snapshots import validate_execution_snapshot
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
 
 APPROVED_ROBUSTNESS_CONFIG_DIGEST = (
-    "06da1e24b298361df6cd6cdad7753813001f8b09b8f12598d2b87f8a7d6a69fd"
+    "bf80d9a913ddd1d527670325dffa19f0d4597741f7e497909d2f844b3d81fbc2"
 )
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _BASE_PROMPTS = ("P0-neutral", "P2-calibrated-abstention")
@@ -161,10 +161,8 @@ def load_robustness_diagnostic_config(path: str | Path) -> Mapping[str, Any]:
         or not isinstance(split_binding, dict)
         or split_binding
         != {
-            "manifest_digest": ("05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"),
-            "artifact_sha256": ("3ceaf111654b80e34abd568853f64bba894fc7c6d7a81950c2868f3584a187f4"),
             "required_e1_state": (
-                "complete-qwen3.6-27b-mlx-4bit-E1-ledger-deduplicated-splits-input"
+                "complete-qwen3.6-27b-nvfp4-E1-ledger-deduplicated-splits-input"
             ),
         }
     ):
@@ -517,7 +515,7 @@ def _validate_robustness_component_selection(
                 "adaptive_policy",
                 "adaptive_policy_digest",
             }
-            or descriptor["model_name"] != "qwen3.6-27b-mlx-4bit"
+            or descriptor["model_name"] != "qwen3.6-27b-nvfp4"
             or descriptor["method"] not in expected_methods
             or not isinstance(descriptor["artifact_sha256"], str)
             or _SHA256.fullmatch(descriptor["artifact_sha256"]) is None
@@ -545,11 +543,11 @@ def _validate_robustness_component_selection(
             loaded_adaptive = load_confirmatory_adaptive_component(component / "artifact")
             if (
                 loaded_adaptive.fingerprint != descriptor["artifact_sha256"]
-                or loaded_adaptive.model_name != "qwen3.6-27b-mlx-4bit"
-                or loaded_adaptive.model_repository != "mlx-community/Qwen3.6-27B-4bit"
-                or loaded_adaptive.model_revision != "c000ac2c2057d94be3fa931000c31723aac53282"
-                or loaded_adaptive.runtime is not Runtime.MLX
-                or loaded_adaptive.quantization != "affine-g64-mlx-4bit"
+                or loaded_adaptive.model_name != "qwen3.6-27b-nvfp4"
+                or loaded_adaptive.model_repository != "nvidia/Qwen3.6-27B-NVFP4"
+                or loaded_adaptive.model_revision != "0893e1606ff3d5f97a441f405d5fc541a6bdf404"
+                or loaded_adaptive.runtime is not Runtime.VLLM
+                or loaded_adaptive.quantization != "modelopt-mixed-nvfp4-fp8"
                 or loaded_adaptive.model_num_layers != 64
                 or not set(_BASE_PROMPTS) <= set(loaded_adaptive.controllers)
                 or not set(_BASE_PROMPTS) <= set(loaded_adaptive.controller_source_prompt_ids)
@@ -636,6 +634,9 @@ def _validate_e1_reviewed_split_binding(
         benchmark: tuple(question.question_id for question in questions)
         for benchmark, questions in authoritative_questions.items()
     }
+    reviewed_manifest = validate_reviewed_split_snapshot(reviewed_paths[0])
+    reviewed_manifest_digest = reviewed_manifest.get("manifest_digest")
+    reviewed_split_sha256 = sha256_path(reviewed_paths[0])
     if e1_run.is_file():
         portable = _load_object(e1_run, "portable Qwen E1 binding")
         digest = portable.pop("binding_digest", None)
@@ -669,8 +670,8 @@ def _validate_e1_reviewed_split_binding(
             or portable.get("e1_record_count") != 19_800
             or portable.get("e1_condition_cells") != expected_cell_inventory
             or portable.get("reviewed_split_manifest_digest")
-            != split_binding["manifest_digest"]
-            or portable.get("reviewed_split_sha256") != split_binding["artifact_sha256"]
+            != reviewed_manifest_digest
+            or portable.get("reviewed_split_sha256") != reviewed_split_sha256
             or not isinstance(question_digests, dict)
             or set(question_digests)
             != {"triviaqa", "simpleqa_verified", "aa_omniscience_public_600"}
@@ -713,18 +714,18 @@ def _validate_e1_reviewed_split_binding(
             or not _verify_portable_e1_completion_signature(portable)
             or digest != stable_hash(portable)
             or sha256_file(e1_run) != _portable_e1_binding_sha256(portable)
-            or any(sha256_path(path) != split_binding["artifact_sha256"] for path in reviewed_paths)
+            or any(sha256_path(path) != reviewed_split_sha256 for path in reviewed_paths)
         ):
             raise DataValidationError("portable Qwen E1 binding differs from the frozen study")
         return MappingProxyType({**portable, "e1_binding_sha256": sha256_file(e1_run)})
     ledger = PhaseRunLedger.open(e1_run, study=study)
     completion = ledger.verify_complete()
     exact_identity = all(
-        condition.model_name == "qwen3.6-27b-mlx-4bit"
-        and condition.model_repository == "mlx-community/Qwen3.6-27B-4bit"
-        and condition.model_revision == "c000ac2c2057d94be3fa931000c31723aac53282"
-        and condition.runtime is Runtime.MLX
-        and condition.quantization == "affine-g64-mlx-4bit"
+        condition.model_name == "qwen3.6-27b-nvfp4"
+        and condition.model_repository == "nvidia/Qwen3.6-27B-NVFP4"
+        and condition.model_revision == "0893e1606ff3d5f97a441f405d5fc541a6bdf404"
+        and condition.runtime is Runtime.VLLM
+        and condition.quantization == "modelopt-mixed-nvfp4-fp8"
         and condition.model_num_layers == 64
         for condition in ledger.contract.conditions
     )
@@ -765,9 +766,6 @@ def _validate_e1_reviewed_split_binding(
         authoritative = (e1_run / authoritative).resolve()
     authoritative = _strict_source_path(authoritative, "Qwen E1 reviewed split")
     split_manifest = validate_reviewed_split_snapshot(authoritative)
-    split_binding = config.get("reviewed_split_binding")
-    if not isinstance(split_binding, Mapping):  # pragma: no cover - config validates
-        raise ConfigurationError("robustness config lacks reviewed-split binding")
     split_sha = sha256_path(authoritative)
     observed_cells = {
         (
@@ -784,8 +782,8 @@ def _validate_e1_reviewed_split_binding(
         or authorization.get("fingerprint") != split_sha
         or ledger.contract.input_fingerprints.get("deduplicated_splits") != split_sha
         or authorization.get("manifest_digest") != split_manifest.get("manifest_digest")
-        or split_manifest.get("manifest_digest") != split_binding["manifest_digest"]
-        or split_sha != split_binding["artifact_sha256"]
+        or split_manifest.get("manifest_digest") != reviewed_manifest_digest
+        or split_sha != reviewed_split_sha256
         or any(sha256_path(path) != split_sha for path in reviewed_paths)
         or dict(ledger.contract.question_ids_by_benchmark) != expected_question_ids
         or observed_cells != expected_cells
@@ -1477,10 +1475,8 @@ def _validate_robustness_plan_structure(
         or _SHA256.fullmatch(e1_provenance["e1_prerequisite_digests"]["E0"])
         is None
         or e1_provenance["e1_binding_sha256"] != source_bindings["e1-phase-ledger"]
-        or e1_provenance["reviewed_split_manifest_digest"]
-        != config["reviewed_split_binding"]["manifest_digest"]
         or e1_provenance["reviewed_split_sha256"]
-        != config["reviewed_split_binding"]["artifact_sha256"]
+        != e1_provenance["e1_input_fingerprints"]["deduplicated_splits"]
         or not isinstance(prompt_fingerprints, dict)
         or set(prompt_fingerprints) != set(_BASE_PROMPTS)
         or any(

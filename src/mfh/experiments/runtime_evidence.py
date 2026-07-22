@@ -1,4 +1,4 @@
-"""Strict, runtime-owned MLX generation resource evidence."""
+"""Strict, runtime-owned VLLM generation resource evidence."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from typing import Any
 
 from mfh.contracts import GenerationRecord
 from mfh.errors import DataValidationError
-from mfh.inference.mlx_runtime import MlxGenerationOutput
+from mfh.inference.vllm_runtime import VllmGenerationOutput
 
 GENERATION_RUNTIME_METRIC_KEYS = frozenset(
     {
         "schema_version",
-        "unified_memory_bytes",
+        "gpu_total_memory_bytes",
         "peak_memory_bytes",
         "generation_peak_memory_bytes",
         "auxiliary_peak_memory_bytes",
@@ -29,14 +29,14 @@ GENERATION_RUNTIME_METRIC_KEYS = frozenset(
 
 
 def _runtime_memory_envelope(runtime_identity: Mapping[str, Any]) -> int:
-    value = runtime_identity.get("unified_memory_bytes")
+    value = runtime_identity.get("gpu_total_memory_bytes")
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise DataValidationError("MLX runtime identity lacks a unified-memory envelope")
+        raise DataValidationError("vLLM runtime identity lacks a GPU-memory envelope")
     return value
 
 
 def build_generation_runtime_metrics(
-    generated: MlxGenerationOutput,
+    generated: VllmGenerationOutput,
     *,
     runtime_identity: Mapping[str, Any],
     auxiliary_peak_memory_bytes: int = 0,
@@ -46,7 +46,7 @@ def build_generation_runtime_metrics(
     envelope = _runtime_memory_envelope(runtime_identity)
     metrics: dict[str, Any] = {
         "schema_version": 1,
-        "unified_memory_bytes": envelope,
+        "gpu_total_memory_bytes": envelope,
         "peak_memory_bytes": max(
             generated.peak_memory_bytes, auxiliary_peak_memory_bytes
         ),
@@ -76,7 +76,7 @@ def validate_generation_runtime_metrics(
     if not isinstance(value, Mapping) or set(value) != GENERATION_RUNTIME_METRIC_KEYS:
         raise DataValidationError("generation runtime metrics schema differs")
     integer_names = (
-        "unified_memory_bytes",
+        "gpu_total_memory_bytes",
         "peak_memory_bytes",
         "generation_peak_memory_bytes",
         "auxiliary_peak_memory_bytes",
@@ -88,7 +88,7 @@ def validate_generation_runtime_metrics(
         for name in integer_names
     ):
         raise DataValidationError("generation runtime memory metrics are invalid")
-    envelope = int(value["unified_memory_bytes"])
+    envelope = int(value["gpu_total_memory_bytes"])
     peak = int(value["peak_memory_bytes"])
     generation_peak = int(value["generation_peak_memory_bytes"])
     auxiliary_peak = int(value["auxiliary_peak_memory_bytes"])

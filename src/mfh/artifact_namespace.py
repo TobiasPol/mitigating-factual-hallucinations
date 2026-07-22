@@ -9,7 +9,7 @@ from types import MappingProxyType
 
 from mfh.errors import ConfigurationError
 
-QWEN_STUDY_NAMESPACE = "qwen36-27b-mlx4-m4max48-v1"
+QWEN_STUDY_NAMESPACE = "qwen36-27b-nvfp4-a10040-v1"
 QWEN_STUDY_ARTIFACT_ROOT = f"artifacts/studies/{QWEN_STUDY_NAMESPACE}"
 
 

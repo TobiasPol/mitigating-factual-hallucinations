@@ -89,12 +89,8 @@ def _mock_e1_provenance(**values: object) -> dict[str, object]:
             "inference_protocol": "a" * 64,
         },
         "e1_prerequisite_digests": {"E0": "b" * 64},
-        "reviewed_split_manifest_digest": (
-            "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
-        ),
-        "reviewed_split_sha256": (
-            "3ceaf111654b80e34abd568853f64bba894fc7c6d7a81950c2868f3584a187f4"
-        ),
+        "reviewed_split_manifest_digest": "c" * 64,
+        "reviewed_split_sha256": "8" * 64,
         "completion_execution_public_key": _COMPLETION_PUBLIC_KEY,
     }
     signed = {
@@ -371,7 +367,12 @@ def test_portable_e1_binding_requires_frozen_execution_signature(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    reviewed = ROOT / "artifacts/splits/triviaqa-reviewed"
+    reviewed = (
+        ROOT
+        / "artifacts/studies/qwen36-27b-nvfp4-a10040-v1/frozen/reviewed-splits"
+    )
+    if not reviewed.is_dir():
+        pytest.skip("external reviewed split artifacts are not present in this checkout")
     study_digest = "f" * 64
     monkeypatch.setattr(
         diagnostics,
@@ -421,12 +422,8 @@ def test_portable_e1_binding_requires_frozen_execution_signature(
             "inference_protocol": "8" * 64,
         },
         "e1_prerequisite_digests": {"E0": "9" * 64},
-        "reviewed_split_manifest_digest": (
-            "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
-        ),
-        "reviewed_split_sha256": (
-            "3ceaf111654b80e34abd568853f64bba894fc7c6d7a81950c2868f3584a187f4"
-        ),
+        "reviewed_split_manifest_digest": "c" * 64,
+        "reviewed_split_sha256": "6" * 64,
         "completion_execution_public_key": _COMPLETION_PUBLIC_KEY,
     }
     signed = {

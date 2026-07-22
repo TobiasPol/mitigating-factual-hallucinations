@@ -47,7 +47,7 @@ from mfh.experiments.runner import (
     validate_side_effect_evaluation_bundle,
 )
 from mfh.experiments.runtime_evidence import build_generation_runtime_metrics
-from mfh.inference.mlx_runtime import as_numpy
+from mfh.inference.vllm_runtime import as_numpy
 from mfh.methods.controls import (
     label_shuffled_centroid_direction,
     matched_random_direction,
@@ -181,7 +181,7 @@ def execute_e7_activation_capture_batch(
     source_question_bundle: str | Path,
     dtype: str = "float16",
 ) -> ActivationBatch:
-    """Capture and sign one SAE activation batch directly through native MLX hooks."""
+    """Capture and sign one SAE activation batch directly through native VLLM hooks."""
 
     from mfh.experiments.e6_likelihood import E6RuntimeAttestor
     from mfh.methods.features import ActivationFeatureSchema
@@ -401,11 +401,11 @@ def execute_coordinate_screen_generation(
 
     from mfh.experiments.e6_likelihood import E6RuntimeAttestor
     from mfh.experiments.e8_protected import question_source_fingerprint
-    from mfh.inference.mlx_research import MlxResearchInterventionState
-    from mfh.inference.mlx_runtime import MlxGenerationOutput
+    from mfh.inference.vllm_research import VllmResearchInterventionState
+    from mfh.inference.vllm_runtime import VllmGenerationOutput
 
     if type(attestor) is not E6RuntimeAttestor:
-        raise DataValidationError("coordinate screen requires the exact MLX attestor")
+        raise DataValidationError("coordinate screen requires the exact VLLM attestor")
     if (
         not _SHA256.fullmatch(prompt_template_sha256)
         or hashlib.sha256(prompt.text.encode()).hexdigest()
@@ -507,7 +507,7 @@ def execute_coordinate_screen_generation(
         intervention_states=interventions,
     )
     if populate_generation:
-        if type(generated) is not MlxGenerationOutput:
+        if type(generated) is not VllmGenerationOutput:
             raise DataValidationError("coordinate screen returned an invalid generation")
         if (
             generation_record.raw_output
@@ -532,7 +532,7 @@ def execute_coordinate_screen_generation(
             output_tokens=generated.output_tokens,
         )
     if (
-        type(generated) is not MlxGenerationOutput
+        type(generated) is not VllmGenerationOutput
         or generated.rendered_prompt != rendered
         or generation_record.rendered_prompt_hash != rendered.sha256
         or generation_record.raw_output != generated.text
@@ -556,7 +556,7 @@ def execute_coordinate_screen_generation(
         ),
     }
     if intervened:
-        assert isinstance(state, MlxResearchInterventionState)
+        assert isinstance(state, VllmResearchInterventionState)
         assert normalized_direction is not None
         assert layer is not None and site is not None and token_scope is not None
         assert reference_rms is not None and retained_fraction is not None

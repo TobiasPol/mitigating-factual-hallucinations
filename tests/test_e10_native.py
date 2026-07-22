@@ -25,7 +25,7 @@ from mfh.errors import DataValidationError
 from mfh.experiments.e8_protected import question_source_fingerprint
 from mfh.experiments.e10_composite import derive_e10_composite_provenance
 from mfh.experiments.e10_native import (
-    NativeE10MlxBackend,
+    NativeE10VllmBackend,
     validate_e10_composite_execution_record,
 )
 from mfh.experiments.gates import validate_side_effect_record
@@ -55,7 +55,7 @@ def test_native_e10_deep_loads_each_exact_policy_identity_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     policy, _, _, _ = _fixture()
-    backend = object.__new__(NativeE10MlxBackend)
+    backend = object.__new__(NativeE10VllmBackend)
     object.__setattr__(backend, "_policy_cache", {})
     calls: list[Path] = []
     hashes: list[Path] = []
@@ -70,7 +70,7 @@ def test_native_e10_deep_loads_each_exact_policy_identity_once(
         "sha256_path",
         lambda value: hashes.append(Path(value)) or "a" * 64,
     )
-    path = ROOT / "artifacts/studies/qwen36-27b-mlx4-m4max48-v1/m6"
+    path = ROOT / "artifacts/studies/qwen36-27b-nvfp4-a10040-v1/m6"
     first = backend._load_policy(path, artifact_sha256="a" * 64)
     second = backend._load_policy(path, artifact_sha256="a" * 64)
 
@@ -98,7 +98,7 @@ def test_e10_language_grade_is_alias_aware_and_tamper_evident() -> None:
         aliases=("東京", "Tokio"),
         metadata={"requested_language": "de"},
     )
-    backend = object.__new__(NativeE10MlxBackend)
+    backend = object.__new__(NativeE10VllmBackend)
     object.__setattr__(backend, "grader_bundle", SimpleNamespace(scorer=object()))
     record = replace(
         record,

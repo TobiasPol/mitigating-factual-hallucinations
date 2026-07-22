@@ -5,24 +5,26 @@ set -euo pipefail
 readonly REPOSITORY_ROOT="${0:A:h:h}"
 cd "${REPOSITORY_ROOT}"
 
-readonly STUDY_ROOT="artifacts/studies/qwen36-27b-mlx4-m4max48-v1"
-readonly MODEL_ROOT="artifacts/models/qwen3.6-27b-mlx-4bit/c000ac2c2057d94be3fa931000c31723aac53282"
+readonly STUDY_ROOT="artifacts/studies/qwen36-27b-nvfp4-a10040-v1"
+readonly MODEL_ROOT="artifacts/models/qwen3.6-27b-nvfp4/0893e1606ff3d5f97a441f405d5fc541a6bdf404"
 readonly GENERATION_SESSION="mfh-qwen-e1-generation"
 readonly GENERATION_CHECKPOINT="${STUDY_ROOT}/checkpoints/E1-generation.json"
 readonly GRADING_CHECKPOINT="${STUDY_ROOT}/checkpoints/E1-grading.json"
 readonly OUTPUT_DIRECTORY="${STUDY_ROOT}/outputs/E1"
 readonly GRADER_ATTEMPTS="${STUDY_ROOT}/work/E1/grader-attempts.jsonl"
 readonly MAX_TRANSIENT_RESTARTS_WITHOUT_PROGRESS=5
-readonly EXPECTED_SPLIT_MANIFEST="05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
-readonly EXPECTED_GRADER_MANIFEST="b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159"
+: "${SPLIT_MANIFEST_DIGEST:?set SPLIT_MANIFEST_DIGEST to the fresh reviewed-split digest}"
+: "${GRADER_MANIFEST_DIGEST:?set GRADER_MANIFEST_DIGEST to the fresh grader digest}"
+readonly EXPECTED_SPLIT_MANIFEST="${SPLIT_MANIFEST_DIGEST}"
+readonly EXPECTED_GRADER_MANIFEST="${GRADER_MANIFEST_DIGEST}"
 
 readonly -a E1_INPUTS=(
-  artifacts/splits/triviaqa-reviewed
-  artifacts/graders/e1-frozen-v2
-  configs/models/qwen3.6-27b-mlx-4bit.yaml
+  "${STUDY_ROOT}/frozen/reviewed-splits"
+  "${STUDY_ROOT}/frozen/E1-graders"
+  configs/models/qwen3.6-27b-nvfp4.yaml
   "${MODEL_ROOT}"
-  configs/models/qwen3.6-27b-mlx-4bit.snapshot.json
-  "${STUDY_ROOT}/frozen/mlx-preflight.json"
+  configs/models/qwen3.6-27b-nvfp4.snapshot.json
+  "${STUDY_ROOT}/frozen/vllm-preflight.json"
   "${STUDY_ROOT}/work/E1"
   "${STUDY_ROOT}/runs/E1"
   "${STUDY_ROOT}/runs/E0"

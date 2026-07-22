@@ -1,4 +1,4 @@
-"""Operator-ready native-MLX execution and finalization of the E4 screen."""
+"""Operator-ready native-VLLM execution and finalization of the E4 screen."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from mfh.data.normalization import normalize_answer
 from mfh.errors import ConfigurationError, DataValidationError, FrozenArtifactError
 from mfh.evaluation.grading import deterministic_short_answer_grade, triviaqa_scores
 from mfh.experiments.e3_phase import open_e3_phase_completion
-from mfh.experiments.e4_act_mlx import E4ActBaseline, verify_e4_act_baseline
+from mfh.experiments.e4_act_vllm import E4ActBaseline, verify_e4_act_baseline
 from mfh.experiments.e4_baselines import (
     E4CapabilityReport,
     E4Feasibility,
@@ -67,23 +67,23 @@ from mfh.experiments.static_direction_sources import (
     ResolvedStaticDirection,
     resolve_static_direction,
 )
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxResearchInterventionState,
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmResearchInterventionState,
 )
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt, as_numpy
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt, as_numpy
 from mfh.provenance import sha256_path, stable_hash
 
 _PROMPTS = ("P0-neutral", "P2-calibrated-abstention")
 _METHODS = ("M1", "M2", "ACT-or-SADI")
-_MEMORY_BYTES = 48 * 1024**3
+_MEMORY_BYTES = 40 * 1024**3
 _MAX_NEW_TOKENS = 48
 _SETUP_INVENTORY = frozenset(
     {"capability-report.json", "screen-receipt.json", "preflights", "policies"}
 )
 
 
-class E4MlxRuntime(Protocol):
+class E4VllmRuntime(Protocol):
     def runtime_identity(self) -> Mapping[str, Any]: ...
 
     def render_prompt(
@@ -92,21 +92,21 @@ class E4MlxRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def generate(
-        self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-    ) -> MlxGenerationOutput: ...
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput: ...
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[
-            tuple[int, ActivationSite], MlxResearchInterventionState
+            tuple[int, ActivationSite], VllmResearchInterventionState
         ],
-    ) -> MlxGenerationOutput: ...
+    ) -> VllmGenerationOutput: ...
 
     def standardized_intervention_state(
         self,
@@ -116,19 +116,19 @@ class E4MlxRuntime(Protocol):
         reference_rms: float,
         token_scope: TokenScope,
         decay: float = 0.0,
-    ) -> MlxResearchInterventionState: ...
+    ) -> VllmResearchInterventionState: ...
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput: ...
+    ) -> VllmPromptFeatureCubeOutput: ...
 
 
 @dataclass(frozen=True, slots=True)
-class E4MlxSetup:
+class E4VllmSetup:
     directory: Path
     report: E4CapabilityReport
     screen: E4ScreenReceipt
@@ -198,12 +198,12 @@ def _optional_capability_probe(
         attempts.append(
             {
                 "capability": "per_head_output_hook",
-                "runtime": "mfh.inference.mlx_research.MlxResearchRuntime",
+                "runtime": "mfh.inference.vllm_research.VllmResearchRuntime",
                 "supported": False,
-                "failure_code": "MLX_PER_HEAD_OUTPUT_HOOK_UNAVAILABLE",
+                "failure_code": "VLLM_PER_HEAD_OUTPUT_HOOK_UNAVAILABLE",
             }
         )
-        failure_codes.append("MLX_PER_HEAD_OUTPUT_HOOK_UNAVAILABLE")
+        failure_codes.append("VLLM_PER_HEAD_OUTPUT_HOOK_UNAVAILABLE")
         checks = {
             "implementation_available": implementation_found,
             "per_head_output_hook": False,
@@ -219,12 +219,12 @@ def _optional_capability_probe(
         attempts.append(
             {
                 "capability": "truthx_runtime_hook",
-                "runtime": "mfh.inference.mlx_research.MlxResearchRuntime",
+                "runtime": "mfh.inference.vllm_research.VllmResearchRuntime",
                 "supported": False,
-                "failure_code": "TRUTHX_MLX_RUNTIME_HOOK_UNAVAILABLE",
+                "failure_code": "TRUTHX_VLLM_RUNTIME_HOOK_UNAVAILABLE",
             }
         )
-        failure_codes.append("TRUTHX_MLX_RUNTIME_HOOK_UNAVAILABLE")
+        failure_codes.append("TRUTHX_VLLM_RUNTIME_HOOK_UNAVAILABLE")
         checks = {
             "compatible_autoencoder": autoencoder_found,
             "implementation_available": implementation_found,
@@ -272,7 +272,7 @@ def _condition(
     )
 
 
-def prepare_e4_mlx_screen(
+def prepare_e4_vllm_screen(
     setup_directory: str | Path,
     ledger_directory: str | Path,
     *,
@@ -294,7 +294,7 @@ def prepare_e4_mlx_screen(
     iti_implementation: str | Path | None = None,
     truthx_implementation: str | Path | None = None,
     truthx_autoencoder: str | Path | None = None,
-) -> E4MlxSetup:
+) -> E4VllmSetup:
     """Freeze capability, screen, policies, conditions, and an empty E4 ledger."""
 
     validate_active_model_spec(model)
@@ -309,7 +309,7 @@ def prepare_e4_mlx_screen(
         or not math.isfinite(standardized_alpha)
         or standardized_alpha == 0.0
     ):
-        raise ConfigurationError("E4 MLX setup differs from the frozen screen protocol")
+        raise ConfigurationError("E4 VLLM setup differs from the frozen screen protocol")
     setup = Path(setup_directory).resolve()
     ledger_path = Path(ledger_directory).resolve()
     if setup.exists() or setup.is_symlink():
@@ -346,7 +346,7 @@ def prepare_e4_mlx_screen(
         implementation=(
             Path(iti_implementation)
             if iti_implementation is not None
-            else project_root / "src/mfh/experiments/e4_iti_mlx.py"
+            else project_root / "src/mfh/experiments/e4_iti_vllm.py"
         ),
     )
     truthx_checks, truthx_details = _optional_capability_probe(
@@ -354,7 +354,7 @@ def prepare_e4_mlx_screen(
         implementation=(
             Path(truthx_implementation)
             if truthx_implementation is not None
-            else project_root / "src/mfh/experiments/e4_truthx_mlx.py"
+            else project_root / "src/mfh/experiments/e4_truthx_vllm.py"
         ),
         autoencoder=(
             Path(truthx_autoencoder)
@@ -405,8 +405,8 @@ def prepare_e4_mlx_screen(
                 ),
                 implementation=(
                     {
-                        "M1": "native-MLX-E3-centroid",
-                        "M2": "native-MLX-residual-CAA",
+                        "M1": "native-VLLM-E3-centroid",
+                        "M2": "native-VLLM-residual-CAA",
                         "ACT-or-SADI": "E2-risk-gated-M2-intensity",
                     }[method]
                     if feasible
@@ -530,7 +530,7 @@ def prepare_e4_mlx_screen(
         },
         prerequisite_runs={ExperimentPhase.E3: e3_phase_run},
     )
-    return E4MlxSetup(
+    return E4VllmSetup(
         directory=setup,
         report=report,
         screen=screen,
@@ -539,7 +539,7 @@ def prepare_e4_mlx_screen(
     )
 
 
-def load_e4_mlx_setup(directory: str | Path) -> E4MlxSetup:
+def load_e4_vllm_setup(directory: str | Path) -> E4VllmSetup:
     source = Path(directory)
     if (
         source.is_symlink()
@@ -547,14 +547,14 @@ def load_e4_mlx_setup(directory: str | Path) -> E4MlxSetup:
         or {item.name for item in source.iterdir()} != _SETUP_INVENTORY
         or any(item.is_symlink() for item in source.rglob("*"))
     ):
-        raise FrozenArtifactError("E4 MLX setup inventory differs")
+        raise FrozenArtifactError("E4 VLLM setup inventory differs")
     report = load_e4_capability_report(source / "capability-report.json")
     screen = load_e4_screen_receipt(source / "screen-receipt.json")
     paths = _policy_paths(source)
     if {item.name for item in (source / "policies").iterdir()} != {
         value.name for value in paths.values()
     }:
-        raise FrozenArtifactError("E4 MLX policy inventory differs")
+        raise FrozenArtifactError("E4 VLLM policy inventory differs")
     policies = {method: load_e4_method_policy(path) for method, path in paths.items()}
     if (
         set(policies) != set(report.feasible_methods)
@@ -564,8 +564,8 @@ def load_e4_mlx_setup(directory: str | Path) -> E4MlxSetup:
             for method, policy in policies.items()
         )
     ):
-        raise FrozenArtifactError("E4 MLX policies differ from capability report")
-    return E4MlxSetup(
+        raise FrozenArtifactError("E4 VLLM policies differ from capability report")
+    return E4VllmSetup(
         directory=source.absolute(),
         report=report,
         screen=screen,
@@ -588,16 +588,16 @@ def _token_indices(scope: TokenScope, output_tokens: int) -> list[int]:
 
 
 def _strict_runtime_arrays(
-    state: MlxResearchInterventionState,
+    state: VllmResearchInterventionState,
     *,
     expected_applications: int,
 ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], np.ndarray[Any, Any]]:
     if (
-        type(state) is not MlxResearchInterventionState
+        type(state) is not VllmResearchInterventionState
         or len(state.applied_pre_history) != expected_applications
         or len(state.applied_post_history) != expected_applications
     ):
-        raise FrozenArtifactError("E4 MLX hook lacks its applied-edit history")
+        raise FrozenArtifactError("E4 VLLM hook lacks its applied-edit history")
     captured = np.ascontiguousarray(
         np.stack(state.applied_pre_history).astype(np.float32, copy=False)
     )
@@ -613,7 +613,7 @@ def _strict_runtime_arrays(
         or state.applications != expected_applications
         or expected_applications <= 0
     ):
-        raise FrozenArtifactError("E4 MLX hook did not execute its exact edit")
+        raise FrozenArtifactError("E4 VLLM hook did not execute its exact edit")
     delta = np.ascontiguousarray(intervened - captured)
     direction = np.ascontiguousarray(as_numpy(state.direction, dtype=np.float32))
     expected = np.stack(
@@ -631,14 +631,14 @@ def _strict_runtime_arrays(
             abs_tol=1e-6,
         )
     ):
-        raise FrozenArtifactError("E4 MLX applied edit differs from direction and alpha")
+        raise FrozenArtifactError("E4 VLLM applied edit differs from direction and alpha")
     return captured, intervened, delta
 
 
-def _runtime_metrics(generated: MlxGenerationOutput, *, prompt_peak: int = 0) -> dict[str, Any]:
+def _runtime_metrics(generated: VllmGenerationOutput, *, prompt_peak: int = 0) -> dict[str, Any]:
     peak = max(prompt_peak, generated.peak_memory_bytes)
     if peak > _MEMORY_BYTES:
-        raise FrozenArtifactError("E4 MLX generation exceeded the 48 GiB envelope")
+        raise FrozenArtifactError("E4 vLLM generation exceeded the A100 GPU envelope")
     return {
         "peak_memory_bytes": peak,
         "active_memory_bytes": generated.active_memory_bytes,
@@ -657,8 +657,8 @@ def _base_record(
     *,
     condition: EvaluationCondition,
     question: Question,
-    rendered: MlxRenderedPrompt,
-    generated: MlxGenerationOutput,
+    rendered: VllmRenderedPrompt,
+    generated: VllmGenerationOutput,
     layer: int | None,
     site: ActivationSite | None,
     scope: TokenScope | None,
@@ -710,7 +710,7 @@ def _base_record(
 
 def _fixed_record(
     *,
-    runtime: E4MlxRuntime,
+    runtime: E4VllmRuntime,
     condition: EvaluationCondition,
     policy: E4MethodPolicy,
     policy_path: Path,
@@ -734,8 +734,8 @@ def _fixed_record(
         max_new_tokens=_MAX_NEW_TOKENS,
         intervention_states={(policy.layer, policy.site): state},
     )
-    if type(generated) is not MlxGenerationOutput:
-        raise FrozenArtifactError("E4 native runtime returned a non-MLX generation")
+    if type(generated) is not VllmGenerationOutput:
+        raise FrozenArtifactError("E4 native runtime returned a non-VLLM generation")
     indices = _token_indices(policy.token_scope, generated.output_tokens)
     captured, intervened, delta = _strict_runtime_arrays(
         state, expected_applications=len(indices)
@@ -795,7 +795,7 @@ def _fixed_record(
 
 def _adaptive_record(
     *,
-    runtime: E4MlxRuntime,
+    runtime: E4VllmRuntime,
     condition: EvaluationCondition,
     policy: E4MethodPolicy,
     baseline: E4ActBaseline,
@@ -830,8 +830,8 @@ def _adaptive_record(
     site: ActivationSite | None = None
     scope: TokenScope | None = None
     alpha = 0.0
-    state: MlxResearchInterventionState | None = None
-    interventions: dict[tuple[int, ActivationSite], MlxResearchInterventionState] = {}
+    state: VllmResearchInterventionState | None = None
+    interventions: dict[tuple[int, ActivationSite], VllmResearchInterventionState] = {}
     if action == "intervene":
         assert adaptive.alpha_risk_threshold is not None
         layer = baseline.intervention_layer
@@ -860,8 +860,8 @@ def _adaptive_record(
         )
     else:
         generated = runtime.generate(rendered, max_new_tokens=_MAX_NEW_TOKENS)
-    if type(generated) is not MlxGenerationOutput:
-        raise FrozenArtifactError("E4 native runtime returned a non-MLX generation")
+    if type(generated) is not VllmGenerationOutput:
+        raise FrozenArtifactError("E4 native runtime returned a non-VLLM generation")
     feature_values = np.ascontiguousarray(features.numpy(), dtype=np.float32)
     metadata: dict[str, Any] = {
         "policy_action": action,
@@ -984,7 +984,7 @@ def _verify_act_controller_replay(
 
 def _assert_ledger_setup(
     ledger: PhaseRunLedger,
-    setup: E4MlxSetup,
+    setup: E4VllmSetup,
 ) -> None:
     expected_policy_sha = {
         method: sha256_path(path) for method, path in setup.policy_paths.items()
@@ -1002,16 +1002,16 @@ def _assert_ledger_setup(
             for condition in ledger.contract.conditions
         )
     ):
-        raise FrozenArtifactError("E4 ledger differs from its frozen MLX setup")
+        raise FrozenArtifactError("E4 ledger differs from its frozen VLLM setup")
 
 
-def run_e4_mlx_screen(
+def run_e4_vllm_screen(
     setup_directory: str | Path,
     ledger_directory: str | Path,
     *,
     study: StudyProtocol,
     prompts: Mapping[str, PromptSpec],
-    runtime: E4MlxRuntime,
+    runtime: E4VllmRuntime,
     execution_private_key_hex: str,
     request_budget: int | None = None,
     checkpoint_rows: int = 8,
@@ -1024,7 +1024,7 @@ def run_e4_mlx_screen(
         raise ConfigurationError("E4 request budget must be positive")
     if type(checkpoint_rows) is not int or checkpoint_rows <= 0:
         raise ConfigurationError("E4 checkpoint rows must be positive")
-    setup = load_e4_mlx_setup(setup_directory)
+    setup = load_e4_vllm_setup(setup_directory)
     if e4_execution_public_key(execution_private_key_hex) not in {
         policy.execution_public_key for policy in setup.policies.values()
     } or len({policy.execution_public_key for policy in setup.policies.values()}) != 1:
@@ -1125,14 +1125,14 @@ def run_e4_mlx_screen(
     )
 
 
-def verify_e4_mlx_screen(
+def verify_e4_vllm_screen(
     setup_directory: str | Path,
     ledger_directory: str | Path,
     *,
     study: StudyProtocol,
     require_complete: bool = False,
 ) -> Mapping[str, Any]:
-    setup = load_e4_mlx_setup(setup_directory)
+    setup = load_e4_vllm_setup(setup_directory)
     ledger = PhaseRunLedger.open(ledger_directory, study=study)
     _assert_ledger_setup(ledger, setup)
     completed, expected = ledger.progress()
@@ -1140,7 +1140,7 @@ def verify_e4_mlx_screen(
     if len(records) != completed:
         raise FrozenArtifactError("E4 ledger progress differs from its records")
     if require_complete and completed != expected:
-        raise FrozenArtifactError("E4 MLX screen is incomplete")
+        raise FrozenArtifactError("E4 VLLM screen is incomplete")
     public_keys = {policy.execution_public_key for policy in setup.policies.values()}
     if len(public_keys) != 1:
         raise FrozenArtifactError("E4 policies do not share one execution signing key")
@@ -1211,7 +1211,7 @@ def verify_e4_mlx_screen(
             conditions[record.condition_id].validate_record(record)
         metrics = record.metadata.get("generation_runtime_metrics")
         if not isinstance(metrics, Mapping) or set(metrics) != metric_keys:
-            raise FrozenArtifactError("E4 record lacks exact MLX runtime metrics")
+            raise FrozenArtifactError("E4 record lacks exact VLLM runtime metrics")
         integer_metrics = tuple(
             metrics[name]
             for name in ("peak_memory_bytes", "active_memory_bytes", "cache_memory_bytes")
@@ -1238,11 +1238,11 @@ def verify_e4_mlx_screen(
             or re.fullmatch(r"[0-9a-f]{64}", metrics["output_token_ids_sha256"])
             is None
         ):
-            raise FrozenArtifactError("E4 record MLX runtime metrics are invalid")
+            raise FrozenArtifactError("E4 record VLLM runtime metrics are invalid")
         peaks.append(int(metrics["peak_memory_bytes"]))
     maximum_peak = max(peaks, default=0)
     if maximum_peak > _MEMORY_BYTES:
-        raise FrozenArtifactError("E4 MLX screen exceeds the memory envelope")
+        raise FrozenArtifactError("E4 VLLM screen exceeds the memory envelope")
     return MappingProxyType(
         {
             "valid": True,
@@ -1255,7 +1255,7 @@ def verify_e4_mlx_screen(
     )
 
 
-def finalize_e4_mlx_screen(
+def finalize_e4_vllm_screen(
     setup_directory: str | Path,
     ledger_directory: str | Path,
     *,
@@ -1265,10 +1265,10 @@ def finalize_e4_mlx_screen(
 ) -> tuple[E4Promotion, Any]:
     """Derive promotion, replay the registered gate, and freeze E4 terminally."""
 
-    setup = load_e4_mlx_setup(setup_directory)
+    setup = load_e4_vllm_setup(setup_directory)
     ledger = PhaseRunLedger.open(ledger_directory, study=study)
     _assert_ledger_setup(ledger, setup)
-    verify_e4_mlx_screen(
+    verify_e4_vllm_screen(
         setup_directory,
         ledger_directory,
         study=study,

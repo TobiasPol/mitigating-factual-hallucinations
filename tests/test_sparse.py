@@ -191,7 +191,7 @@ class CoordinateSparseTests(unittest.TestCase):
                 "prompt_template_sha256": dataset.feature_schema.prompt_sha256,
                 "generation_runtime_metrics": {
                     "schema_version": 1,
-                    "unified_memory_bytes": 1_000_000,
+                    "gpu_total_memory_bytes": 1_000_000,
                     "peak_memory_bytes": 1_000,
                     "generation_peak_memory_bytes": 1_000,
                     "auxiliary_peak_memory_bytes": 0,
@@ -296,7 +296,7 @@ class CoordinateSparseTests(unittest.TestCase):
         )
         source = records[0]
         forged_metrics = dict(source.metadata["generation_runtime_metrics"])
-        forged_metrics["unified_memory_bytes"] = 2_000_000
+        forged_metrics["gpu_total_memory_bytes"] = 2_000_000
         forged = replace(
             source,
             metadata={
@@ -326,7 +326,7 @@ class CoordinateSparseTests(unittest.TestCase):
                 runtime_artifact_sha256=runtime_sha,
                 execution_public_key=execution_public_key,
                 prompt_template_sha256=dataset.feature_schema.prompt_sha256,
-                runtime_identity={"unified_memory_bytes": 1_000_000},
+                runtime_identity={"gpu_total_memory_bytes": 1_000_000},
             )
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "coordinate"
@@ -791,7 +791,7 @@ class SparseAutoencoderTests(unittest.TestCase):
 
         receipt = _create_long_computation_receipt(
             wall_time_seconds=12.5,
-            peak_unified_memory_bytes=1024,
+            peak_gpu_memory_bytes=1024,
             package_lock_sha256="a" * 64,
             model_snapshot_sha256="b" * 64,
             resumable_chain_head="c" * 64,
@@ -804,7 +804,7 @@ class SparseAutoencoderTests(unittest.TestCase):
         )
         self.assertEqual(receipt.execution_public_key, public_key)
         with self.assertRaisesRegex(DataValidationError, "signature"):
-            replace(receipt, peak_unified_memory_bytes=2048)
+            replace(receipt, peak_gpu_memory_bytes=2048)
 
 
 class ActivationCorpusTests(unittest.TestCase):
@@ -886,7 +886,7 @@ class ActivationCorpusTests(unittest.TestCase):
             )
             self.assertEqual(len(measured.results), 3)
             self.assertGreater(measured.receipt.wall_time_seconds, 0)
-            self.assertGreater(measured.receipt.peak_unified_memory_bytes, 0)
+            self.assertGreater(measured.receipt.peak_gpu_memory_bytes, 0)
             self.assertTrue(
                 measured.receipt.measurement_method.startswith(
                     "resource.getrusage:RUSAGE_SELF:"

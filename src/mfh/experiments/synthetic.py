@@ -700,7 +700,7 @@ def _phase_e7(seed: int) -> tuple[dict[str, Any], Tensor]:
             "prompt_template_sha256": screen_feature_schema.prompt_sha256,
             "generation_runtime_metrics": {
                 "schema_version": 1,
-                "unified_memory_bytes": 1_000_000,
+                "gpu_total_memory_bytes": 1_000_000,
                 "peak_memory_bytes": 1_000,
                 "generation_peak_memory_bytes": 1_000,
                 "auxiliary_peak_memory_bytes": 0,

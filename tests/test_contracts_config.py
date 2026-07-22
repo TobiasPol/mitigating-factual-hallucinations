@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ConfigurationTests(unittest.TestCase):
     def test_repository_configs_are_strict_and_pinned(self) -> None:
-        model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml")
+        model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml")
         benchmark = load_benchmark_spec(ROOT / "configs/benchmarks/simpleqa-verified.yaml")
         prompts = load_prompt_specs(ROOT / "configs/prompts/primary.yaml")
         protocol = load_inference_protocol(ROOT / "configs/experiments/core.yaml")
@@ -33,7 +33,7 @@ class ConfigurationTests(unittest.TestCase):
             ROOT / "configs/contamination/triviaqa-ood.yaml"
         )
         self.assertEqual(model.num_layers, 64)
-        self.assertIs(model.runtime, Runtime.MLX)
+        self.assertIs(model.runtime, Runtime.VLLM)
         self.assertEqual(len(model.revision), 40)
         self.assertEqual(benchmark.split, "eval")
         self.assertEqual(
@@ -58,7 +58,7 @@ class ConfigurationTests(unittest.TestCase):
   name: unsafe
   repository: example/model
   revision: main
-  runtime: mlx
+  runtime: vllm
   quantization: none
   num_layers: 1
 """,

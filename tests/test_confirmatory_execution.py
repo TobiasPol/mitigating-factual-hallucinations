@@ -34,15 +34,15 @@ from mfh.experiments.confirmatory_components import (
 )
 from mfh.experiments.confirmatory_graders import write_confirmatory_grader_bundle
 from mfh.experiments.e6_likelihood import E6RuntimeAttestor
-from mfh.experiments.e9_native import NativeE9MlxBackend
+from mfh.experiments.e9_native import NativeE9VllmBackend
 from mfh.experiments.protocol import ExperimentPhase, load_study_protocol
 from mfh.experiments.runner import (
     EvaluationCondition,
     _sign_confirmatory_execution_receipt_for_test,
     validate_confirmatory_execution_receipt,
 )
-from mfh.inference.mlx_research import MlxResearchRuntime
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_research import VllmResearchRuntime
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.provenance import sha256_path, stable_hash
 from tests.e4_test_artifacts import build_e3_m1_bundle
 
@@ -62,7 +62,7 @@ def _key_material() -> tuple[str, str]:
 
 
 def _condition(method: str) -> EvaluationCondition:
-    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml")
+    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml")
     study = load_study_protocol(ROOT / "configs/experiments/phases.yaml")
     fixed = method != "M0"
     return EvaluationCondition(
@@ -72,7 +72,7 @@ def _condition(method: str) -> EvaluationCondition:
         model_name=model.name,
         model_repository=model.repository,
         model_revision=model.revision,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=model.quantization,
         model_num_layers=model.num_layers,
         system_prompt_id="P0-neutral",
@@ -102,7 +102,7 @@ def _record(condition: EvaluationCondition) -> GenerationRecord:
         "decoding_max_new_tokens": 48,
         "generation_runtime_metrics": {
             "schema_version": 1,
-            "unified_memory_bytes": 16 * 1024**3,
+            "gpu_total_memory_bytes": 16 * 1024**3,
             "peak_memory_bytes": 1024,
             "generation_peak_memory_bytes": 1024,
             "auxiliary_peak_memory_bytes": 0,
@@ -227,7 +227,7 @@ def test_confirmatory_receipt_rejects_resigned_invalid_runtime_metrics(
             metrics["generation_peak_memory_bytes"] = 16 * 1024**3 + 1
             metrics["peak_memory_bytes"] = 16 * 1024**3 + 1
         elif mutation == "forged-attested-envelope":
-            metrics["unified_memory_bytes"] = 32 * 1024**3
+            metrics["gpu_total_memory_bytes"] = 32 * 1024**3
         elif mutation == "forged-auxiliary-peak":
             metrics["auxiliary_peak_memory_bytes"] = 1
         else:
@@ -252,7 +252,7 @@ def test_confirmatory_receipt_rejects_resigned_invalid_runtime_metrics(
             signed,
             condition,
             execution_public_key=public_hex,
-            runtime_identity={"unified_memory_bytes": 16 * 1024**3},
+            runtime_identity={"gpu_total_memory_bytes": 16 * 1024**3},
         )
 
 
@@ -383,7 +383,7 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     condition = _condition("M0")
-    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml")
+    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml")
     prompt = next(
         value
         for value in load_prompt_specs(ROOT / "configs/prompts/primary.yaml")
@@ -395,7 +395,7 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
         text="What is the capital of France?",
         aliases=("Paris",),
     )
-    rendered = MlxRenderedPrompt(
+    rendered = VllmRenderedPrompt(
         text="rendered prompt",
         sha256="7" * 64,
         token_ids=(1, 2, 3),
@@ -403,20 +403,32 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
         messages=({"role": "user", "content": question.text},),
     )
     identity = {
-        "backend": "mlx",
-        "mlx": "0.29.3",
-        "mlx_lm": "0.30.3",
+        "backend": "vllm",
+        "vllm": "0.24.0",
+        "transformers": "5.2.0",
+        "torch": "2.11.0",
         "python": "3.12",
-        "machine_model": "MacBookPro",
-        "chip": "Apple M1",
-        "unified_memory_bytes": 16 * 1024**3,
-        "physical_cpu_cores": 8,
-        "architecture": "arm64",
-        "os": "macOS",
-        "os_build": "test",
-        "model_class": "TestModel",
+        "architecture": "x86_64",
+        "os": "Linux-test",
+        "nvidia_driver": "570.00",
+        "gpu_name": "NVIDIA A100-SXM4-40GB",
+        "gpu_total_memory_bytes": 40_000_000_000,
+        "cuda_capability": "8.0",
+        "cuda_runtime": "12.9",
+        "tensor_parallel_size": 1,
+        "quantization_loader": "modelopt_mixed",
+        "quantization_config_class": (
+            "vllm.model_executor.layers.quantization.modelopt."
+            "ModelOptMixedPrecisionConfig"
+        ),
+        "quantization_execution": "marlin-w4a16-fp8-weight-only-on-sm80",
+        "model_class": (
+            "vllm.model_executor.models.qwen3_5."
+            "Qwen3_5ForConditionalGeneration"
+        ),
         "tokenizer_class": "TestTokenizer",
         "num_layers": model.num_layers,
+        "hidden_size": 5_120,
         "seed": condition.seed,
         "model_repository": model.repository,
         "model_revision": model.revision,
@@ -425,27 +437,30 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
         "snapshot_sha256": "8" * 64,
         "research_provenance": {"test": "native-boundary"},
         "research_toolchain": {
-            "xcodebuild": "test",
-            "metal_compiler": "test",
+            "vllm": "0.24.0",
+            "torch": "2.11.0",
+            "transformers": "5.2.0",
+            "numpy": "2.4.3",
+            "nvidia_driver": "570.00",
         },
     }
-    monkeypatch.setattr(MlxResearchRuntime, "runtime_identity", lambda _self: identity)
+    monkeypatch.setattr(VllmResearchRuntime, "runtime_identity", lambda _self: identity)
     monkeypatch.setattr(
-        MlxResearchRuntime,
+        VllmResearchRuntime,
         "render_prompt",
         lambda _self, _prompt, _question, metadata=None: rendered,
     )
 
     def generate(
-        _self: MlxResearchRuntime,
-        actual_rendered: MlxRenderedPrompt,
+        _self: VllmResearchRuntime,
+        actual_rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: object,
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 48
         assert intervention_states == {}
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=actual_rendered,
             token_ids=(10,),
             text="Paris",
@@ -461,8 +476,8 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
             cache_memory_bytes=256,
         )
 
-    monkeypatch.setattr(MlxResearchRuntime, "generate_with_interventions", generate)
-    runtime = object.__new__(MlxResearchRuntime)
+    monkeypatch.setattr(VllmResearchRuntime, "generate_with_interventions", generate)
+    runtime = object.__new__(VllmResearchRuntime)
     private_hex, public_hex = _key_material()
     attestor = E6RuntimeAttestor(runtime, execution_private_key=private_hex)
     runtime_artifact = tmp_path / "runtime-attestation.json"
@@ -475,6 +490,15 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
     strongreject.mkdir()
     (ifeval / "evaluator").write_text("test\n", encoding="utf-8")
     (strongreject / "grader").write_text("test\n", encoding="utf-8")
+    official = tmp_path / "official-graders"
+    official.mkdir()
+    (official / "fixture.txt").write_text("test\n", encoding="utf-8")
+    official_digest = "b" * 64
+    monkeypatch.setattr(
+        confirmatory_graders,
+        "verify_e1_grader_bundle",
+        lambda *_args, **_kwargs: {"manifest_digest": official_digest},
+    )
     monkeypatch.setattr(
         confirmatory_graders,
         "validate_ifeval_evaluator",
@@ -488,16 +512,14 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
     grader_bundle = tmp_path / "graders"
     write_confirmatory_grader_bundle(
         grader_bundle,
-        official_grader_bundle=ROOT / "artifacts/graders/e1-frozen-v2",
-        expected_official_manifest_digest=(
-            "b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159"
-        ),
+        official_grader_bundle=official,
+        expected_official_manifest_digest=official_digest,
         side_effect_scorer=scorer,
         ifeval_evaluator=ifeval,
         strongreject_grader=strongreject,
         runtime_attestation=runtime_artifact,
     )
-    backend = NativeE9MlxBackend(
+    backend = NativeE9VllmBackend(
         attestor=attestor,
         runtime_artifact=runtime_artifact,
         grader_bundle=grader_bundle,
@@ -516,7 +538,7 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
     assert record.raw_output == "Paris"
     assert record.metadata["generation_runtime_metrics"] == {
         "schema_version": 1,
-        "unified_memory_bytes": 16 * 1024**3,
+        "gpu_total_memory_bytes": 40_000_000_000,
         "peak_memory_bytes": 1024,
         "generation_peak_memory_bytes": 1024,
         "auxiliary_peak_memory_bytes": 0,
@@ -531,7 +553,7 @@ def test_native_e9_m0_executes_live_runtime_and_runtime_signs_receipt(
     assert record.metadata["confirmatory_execution_receipt_signature"]
     condition.validate_record(record)
 
-    replacement = object.__new__(MlxResearchRuntime)
+    replacement = object.__new__(VllmResearchRuntime)
     attestor.runtime = replacement
     with pytest.raises(FrozenArtifactError, match="runtime was replaced"):
         backend.execute(
@@ -560,7 +582,7 @@ def test_native_e9_terminal_grader_failure_is_an_unscorable_row(
             response_body=error_body,
         )
 
-    backend = object.__new__(NativeE9MlxBackend)
+    backend = object.__new__(NativeE9VllmBackend)
     object.__setattr__(
         backend,
         "grader_bundle",

@@ -21,9 +21,9 @@ from mfh.evaluation.openrouter import (
 from mfh.provenance import sha256_file, sha256_path, stable_hash
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_AMENDMENT_DIGEST = "c2296baa709740ef11c78656f9b58033a7c9f5c764d5594b0ec0a4702ddff3aa"
-_CATALOG_SHA256 = "3dbeb1f9a71faed5435d6c1ce3f4ae6a0b388cd911b0d1ac7e6b845d930b2045"
-_CATALOG_SOURCE = "artifacts/graders/openrouter/catalog-2026-07-17.json"
+_AMENDMENT_DIGEST = "3c8bb042d1d566650b39b10f23d368b4cf344f83c03157f999e6248ac99be555"
+_CATALOG_SHA256 = "8c0fc0a422d3fbbb8818e93a0fb7e8b868ba7c77e976eaa3e5f7c9f715e0f3df"
+_CATALOG_SOURCE = "artifacts/graders/openrouter/catalog-2026-07-22.json"
 _SOURCE_PATHS = {
     "aa_config": "configs/graders/aa-omniscience-public.yaml",
     "aa_prompt": "configs/graders/aa-omniscience-public.prompt.txt",
@@ -51,10 +51,6 @@ _SOURCE_PATHS = {
     ),
 }
 _REQUIRED_ROLES = frozenset(_SOURCE_PATHS)
-_CANONICAL_FROZEN_BUNDLE = "artifacts/graders/e1-frozen-v2"
-_CANONICAL_MANIFEST_DIGEST = (
-    "b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159"
-)
 
 
 def _repository_root(repository_root: str | Path | None) -> Path:
@@ -311,35 +307,6 @@ def write_e1_grader_bundle(
     )["E1 grader bundle"]
     if target.exists():
         raise FrozenArtifactError(f"refusing to overwrite E1 grader bundle: {target}")
-    root = _repository_root(repository_root)
-    canonical = root / _CANONICAL_FROZEN_BUNDLE
-    if canonical.is_dir() and canonical.resolve() != target.resolve():
-        verify_e1_grader_bundle(
-            canonical,
-            expected_manifest_digest=_CANONICAL_MANIFEST_DIGEST,
-            repository_root=root,
-            verify_live_sources=False,
-        )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        stage = Path(
-            tempfile.mkdtemp(prefix=f".{target.name}.stage-", dir=target.parent)
-        )
-        try:
-            shutil.copytree(canonical / "files", stage / "files")
-            shutil.copyfile(canonical / "manifest.json", stage / "manifest.json")
-            manifest = verify_e1_grader_bundle(
-                stage,
-                expected_manifest_digest=_CANONICAL_MANIFEST_DIGEST,
-                repository_root=root,
-                verify_live_sources=False,
-            )
-            os.replace(stage, target)
-            result = dict(manifest)
-            result["bundle_sha256"] = sha256_path(target)
-            return result
-        finally:
-            if stage.exists():
-                shutil.rmtree(stage)
     sources = grader_bundle_sources(repository_root)
     starting_hashes: dict[str, str] = {}
     for role, source in sources.items():

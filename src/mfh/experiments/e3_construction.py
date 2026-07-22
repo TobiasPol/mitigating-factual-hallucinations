@@ -1,4 +1,4 @@
-"""Resumable native-MLX construction of the E3 M1-R and M1-P vector banks."""
+"""Resumable native-VLLM construction of the E3 M1-R and M1-P vector banks."""
 
 from __future__ import annotations
 
@@ -34,12 +34,12 @@ from mfh.experiments.model_selection import (
     ACTIVE_RUNTIME_POLICY_RELATIVE,
     validate_active_study_artifact_paths,
 )
-from mfh.inference.mlx_preflight import validate_mlx_preflight_receipt
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxTeacherForcedCubeOutput,
+from mfh.inference.vllm_preflight import validate_vllm_preflight_receipt
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmTeacherForcedCubeOutput,
 )
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.provenance import sha256_file, stable_hash
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -49,7 +49,7 @@ _OUTCOMES = (Outcome.CORRECT, Outcome.INCORRECT)
 _WORK_INVENTORY = frozenset(
     {"plan.json", "generations.jsonl", "sessions.jsonl", "checkpoints"}
 )
-_UNIFIED_MEMORY_BYTES = 51_539_607_552
+_GPU_MEMORY_BYTES = 40 * 1024**3
 _CANONICAL_PROMPTS = MappingProxyType(
     {
         "P0-neutral": "You are a helpful assistant. Answer the user's factual question.",
@@ -61,16 +61,22 @@ _CANONICAL_PROMPTS = MappingProxyType(
 )
 _EXPECTED_BASE_RUNTIME = MappingProxyType(
     {
-        "backend": "mlx",
-        "mlx": "0.31.2",
-        "mlx_lm": "0.31.3",
-        "python": "3.11.14",
-        "chip": "Apple M4 Max",
-        "unified_memory_bytes": 51_539_607_552,
-        "architecture": "arm64",
-        "model_class": "mlx_lm.models.qwen3_5.Model",
-        "tokenizer_class": "mlx_lm.tokenizer_utils.TokenizerWrapper",
+        "backend": "vllm",
+        "vllm": "0.24.0",
+        "architecture": "x86_64",
+        "model_class": (
+            "vllm.model_executor.models.qwen3_5."
+            "Qwen3_5ForConditionalGeneration"
+        ),
         "num_layers": 64,
+        "hidden_size": 5_120,
+        "cuda_capability": "8.0",
+        "tensor_parallel_size": 1,
+        "quantization_loader": "modelopt_mixed",
+        "quantization_config_class": (
+            "vllm.model_executor.layers.quantization.modelopt."
+            "ModelOptMixedPrecisionConfig"
+        ),
         "seed": 17,
     }
 )
@@ -94,21 +100,13 @@ _EXPECTED_RESEARCH_PROVENANCE_FIELDS = {
     "tokenizer_sha256",
     "chat_template_sha256",
 }
-_EXPECTED_SPLIT_FINGERPRINTS = MappingProxyType(
+_SPLIT_FINGERPRINT_FIELDS = frozenset(
     {
-        "reviewed_split_manifest_digest": (
-            "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
-        ),
-        "review_result_manifest_digest": (
-            "6e03e98d9b09ee83fcfbbe5d1268ef42d2991467db043ecc345de84f64607f59"
-        ),
-        "t_steer_question_ids_sha256": (
-            "2493ffbd5c73c9f1b42e419e9ebf50860d6e53b2344324eed731b793ae7ec2a7"
-        ),
+        "reviewed_split_manifest_digest",
+        "review_result_manifest_digest",
+        "t_steer_question_ids_sha256",
+        "t_steer_questions_digest",
     }
-)
-_EXPECTED_T_STEER_QUESTIONS_DIGEST = (
-    "0b0b6b57cced25d22e907f336365972905920580a3e7b1e7da093826f8f627c0"
 )
 
 
@@ -119,28 +117,28 @@ class E3ConstructionRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def generate(
-        self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-    ) -> MlxGenerationOutput: ...
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput: ...
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput: ...
+    ) -> VllmPromptFeatureCubeOutput: ...
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxTeacherForcedCubeOutput: ...
+    ) -> VllmTeacherForcedCubeOutput: ...
 
     def runtime_identity(self) -> Mapping[str, Any]: ...
 
@@ -242,10 +240,10 @@ class VerifiedE3ConstructionSnapshot:
 @dataclass(slots=True)
 class _Accumulator:
     processed_rows: int
-    counts: np.ndarray
-    sums: np.ndarray
-    rms_elements: np.ndarray
-    rms_sum_squares: np.ndarray
+    counts: np.ndarray[Any, Any]
+    sums: np.ndarray[Any, Any]
+    rms_elements: np.ndarray[Any, Any]
+    rms_sum_squares: np.ndarray[Any, Any]
 
 
 def _validated_json_mapping(value: Mapping[str, Any], *, label: str) -> Mapping[str, Any]:
@@ -280,7 +278,8 @@ def _valid_research_provenance(
         type(provenance) is not dict
         or set(provenance) != _EXPECTED_RESEARCH_PROVENANCE_FIELDS
         or type(toolchain) is not dict
-        or set(toolchain) != {"xcodebuild", "metal_compiler"}
+        or set(toolchain)
+        != {"vllm", "torch", "transformers", "numpy", "nvidia_driver"}
         or any(not isinstance(value, str) or not value for value in toolchain.values())
     ):
         return False
@@ -301,10 +300,10 @@ def _valid_research_provenance(
     try:
         receipt_path.relative_to(root)
         snapshot_path.relative_to(root)
-        model_config = root / "configs/models/qwen3.6-27b-mlx-4bit.yaml"
-        snapshot_manifest = root / "configs/models/qwen3.6-27b-mlx-4bit.snapshot.json"
+        model_config = root / "configs/models/qwen3.6-27b-nvfp4.yaml"
+        snapshot_manifest = root / "configs/models/qwen3.6-27b-nvfp4.snapshot.json"
         runtime_policy = root / ACTIVE_RUNTIME_POLICY_RELATIVE
-        receipt = validate_mlx_preflight_receipt(
+        receipt = validate_vllm_preflight_receipt(
             receipt_path,
             project_root=root,
             model_config=model_config,
@@ -373,14 +372,14 @@ def _scientific_eligible(
         for name, text in _CANONICAL_PROMPTS.items()
     )
     dynamic_host_valid = (
-        isinstance(runtime_identity.get("machine_model"), str)
-        and bool(runtime_identity["machine_model"])
-        and type(runtime_identity.get("physical_cpu_cores")) is int
-        and runtime_identity["physical_cpu_cores"] > 0
+        isinstance(runtime_identity.get("gpu_name"), str)
+        and "A100" in runtime_identity["gpu_name"]
+        and type(runtime_identity.get("gpu_total_memory_bytes")) is int
+        and runtime_identity["gpu_total_memory_bytes"] >= 40_000_000_000
         and isinstance(runtime_identity.get("os"), str)
         and bool(runtime_identity["os"])
-        and isinstance(runtime_identity.get("os_build"), str)
-        and bool(runtime_identity["os_build"])
+        and isinstance(runtime_identity.get("nvidia_driver"), str)
+        and bool(runtime_identity["nvidia_driver"])
     )
     return bool(
         protocol.scientific_eligible
@@ -392,8 +391,12 @@ def _scientific_eligible(
         )
         and dynamic_host_valid
         and _valid_research_provenance(provenance, toolchain)
-        and input_fingerprints == dict(_EXPECTED_SPLIT_FINGERPRINTS)
-        and questions_digest == _EXPECTED_T_STEER_QUESTIONS_DIGEST
+        and set(input_fingerprints) == _SPLIT_FINGERPRINT_FIELDS
+        and all(
+            isinstance(value, str) and _SHA256.fullmatch(value) is not None
+            for value in input_fingerprints.values()
+        )
+        and questions_digest == input_fingerprints["t_steer_questions_digest"]
     )
 
 
@@ -458,7 +461,7 @@ def _validated_generation_evidence(value: Mapping[str, Any]) -> Mapping[str, Any
     return _validated_json_mapping(normalized, label="E3 generation evidence")
 
 
-def _generation_evidence(value: MlxGenerationOutput) -> Mapping[str, Any]:
+def _generation_evidence(value: VllmGenerationOutput) -> Mapping[str, Any]:
     return _validated_generation_evidence(
         {
             "raw_output": value.text,
@@ -479,7 +482,7 @@ def _generation_evidence(value: MlxGenerationOutput) -> Mapping[str, Any]:
     )
 
 
-def _questions_digest(questions: Sequence[Question]) -> str:
+def e3_questions_digest(questions: Sequence[Question]) -> str:
     return stable_hash(
         [
             {
@@ -548,7 +551,7 @@ def _plan_body(
     ):
         raise DataValidationError("E3 construction geometry or checkpoint policy is invalid")
     identity = _validated_json_mapping(runtime_identity, label="E3 runtime identity")
-    questions_digest = _questions_digest(questions)
+    questions_digest = e3_questions_digest(questions)
     if any(
         type(name) is not str
         or not name.strip()
@@ -560,7 +563,7 @@ def _plan_body(
     return {
         "schema_version": 1,
         "phase": "E3-construction",
-        "runner": "resumable-native-mlx-online-centroids",
+        "runner": "resumable-native-vllm-online-centroids",
         "runner_source_sha256": sha256_file(Path(__file__)),
         "protocol": protocol.to_dict(),
         "schedule_digest": stable_hash([row.to_dict() for row in schedule]),
@@ -668,7 +671,7 @@ def _load_plan(path: Path) -> dict[str, Any]:
         or body.get("runner_source_sha256") != sha256_file(Path(__file__))
         or body.get("schema_version") != 1
         or body.get("phase") != "E3-construction"
-        or body.get("runner") != "resumable-native-mlx-online-centroids"
+        or body.get("runner") != "resumable-native-vllm-online-centroids"
         or type(body.get("protocol")) is not dict
         or type(body.get("runtime_identity")) is not dict
         or type(body.get("input_fingerprints")) is not dict
@@ -976,7 +979,7 @@ def _render_for_record(
     question: Question,
     prompt: PromptSpec,
     record: E3GenerationRecord | None,
-) -> MlxRenderedPrompt:
+) -> VllmRenderedPrompt:
     rendered = runtime.render_prompt(prompt, question.text, metadata=question.metadata)
     if record is not None and (
         rendered.sha256 != record.rendered_prompt_sha256
@@ -991,8 +994,8 @@ def _new_generation_record(
     row: E3ConstructionRow,
     plan_identity: str,
     question: Question,
-    rendered: MlxRenderedPrompt,
-    generation: MlxGenerationOutput,
+    rendered: VllmRenderedPrompt,
+    generation: VllmGenerationOutput,
 ) -> E3GenerationRecord:
     if generation.rendered_prompt != rendered:
         raise DataValidationError("E3 generation returned a different rendered prompt")
@@ -1012,8 +1015,8 @@ def _new_generation_record(
 
 
 def _validated_activation(
-    value: np.ndarray, *, rows: int | None, hidden_width: int
-) -> np.ndarray:
+    value: np.ndarray[Any, Any], *, rows: int | None, hidden_width: int
+) -> np.ndarray[Any, Any]:
     array = np.asarray(value, dtype=np.float32)
     if (
         array.ndim != 2
@@ -1029,11 +1032,17 @@ def _validated_activation(
 def _collect_observation(
     *,
     runtime: E3ConstructionRuntime,
-    rendered: MlxRenderedPrompt,
+    rendered: VllmRenderedPrompt,
     record: E3GenerationRecord,
     protocol: E3Protocol,
     hidden_width: int,
-) -> tuple[dict[tuple[str, ActivationSite, int], tuple[np.ndarray, np.ndarray]], int]:
+) -> tuple[
+    dict[
+        tuple[str, ActivationSite, int],
+        tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]],
+    ],
+    int,
+]:
     if record.outcome not in _OUTCOMES:
         return {}, 0
     prompt = runtime.prompt_feature_cube(
@@ -1048,7 +1057,10 @@ def _collect_observation(
     )
     if response_cube.response_text_sha256 != hashlib.sha256(response.encode()).hexdigest():
         raise DataValidationError("E3 response cube differs from journaled output")
-    values: dict[tuple[str, ActivationSite, int], tuple[np.ndarray, np.ndarray]] = {}
+    values: dict[
+        tuple[str, ActivationSite, int],
+        tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]],
+    ] = {}
     for site in protocol.candidate_sites:
         for layer in protocol.candidate_layers:
             prompt_array = _validated_activation(
@@ -1071,7 +1083,10 @@ def _apply_observation(
     accumulator: _Accumulator,
     *,
     record: E3GenerationRecord,
-    values: Mapping[tuple[str, ActivationSite, int], tuple[np.ndarray, np.ndarray]],
+    values: Mapping[
+        tuple[str, ActivationSite, int],
+        tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]],
+    ],
     protocol: E3Protocol,
 ) -> None:
     if record.outcome not in _OUTCOMES:
@@ -1312,7 +1327,7 @@ def verify_e3_construction_work(
         ),
         default=0,
     )
-    memory_within_envelope = maximum_peak_memory <= _UNIFIED_MEMORY_BYTES
+    memory_within_envelope = maximum_peak_memory <= _GPU_MEMORY_BYTES
     if len(records) < accumulator.processed_rows:
         raise FrozenArtifactError("E3 checkpoint exceeds generation journal")
     if sessions and (sessions[-1]["status"] == "complete") != complete:

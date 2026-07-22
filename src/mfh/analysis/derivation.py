@@ -926,7 +926,7 @@ def _e7_interpretability_section(run_directory: str | Path) -> dict[str, Any]:
     if receipt is not None:
         result["measured_execution"] = {
             "wall_time_seconds": receipt.wall_time_seconds,
-            "peak_unified_memory_bytes": receipt.peak_unified_memory_bytes,
+            "peak_gpu_memory_bytes": receipt.peak_gpu_memory_bytes,
             "package_lock_sha256": receipt.package_lock_sha256,
             "model_snapshot_sha256": receipt.model_snapshot_sha256,
             "runtime_artifact_sha256": receipt.runtime_artifact_sha256,
@@ -1524,7 +1524,7 @@ def _runtime_replication(
     if not mean_delta_by_site:
         mean_delta_by_site = {"no-intervention": 0.0}
     passed = (
-        set(runtime_counts) == {Runtime.MLX.value}
+        set(runtime_counts) == {Runtime.VLLM.value}
         and len(identity) == 1
         and signed == len(records)
         and bool(peaks)
@@ -1533,7 +1533,7 @@ def _runtime_replication(
         and len(site_evidence) == len(records)
     )
     return {
-        "local_mlx_execution": {
+        "local_vllm_execution": {
             "passed": passed,
             "record_count": len(records),
             "mean_latency_seconds": fmean(latencies),
@@ -1554,14 +1554,19 @@ def _runtime_replication(
             "runtime_session_identity_sha256": runtime_identity_digest,
             "intervention_site_evidence_sha256": stable_hash(site_evidence),
             "runtime_counts": dict(sorted(runtime_counts.items())),
-            "mlx_versions": {str(runtime_identity["mlx"]): 1},
-            "mlx_lm_versions": {str(runtime_identity["mlx_lm"]): 1},
-            "machine_models": {str(runtime_identity["machine_model"]): 1},
-            "chips": {str(runtime_identity["chip"]): 1},
+            "vllm_versions": {str(runtime_identity["vllm"]): 1},
+            "torch_versions": {str(runtime_identity["torch"]): 1},
+            "transformers_versions": {str(runtime_identity["transformers"]): 1},
+            "nvidia_drivers": {str(runtime_identity["nvidia_driver"]): 1},
+            "gpu_models": {str(runtime_identity["gpu_name"]): 1},
             "operating_systems": {str(runtime_identity["os"]): 1},
-            "os_builds": {str(runtime_identity["os_build"]): 1},
             "architectures": {str(runtime_identity["architecture"]): 1},
-            "unified_memory_bytes": int(runtime_identity["unified_memory_bytes"]),
+            "cuda_capabilities": {str(runtime_identity["cuda_capability"]): 1},
+            "cuda_runtimes": {str(runtime_identity["cuda_runtime"]): 1},
+            "quantization_executions": {
+                str(runtime_identity["quantization_execution"]): 1
+            },
+            "gpu_total_memory_bytes": int(runtime_identity["gpu_total_memory_bytes"]),
             "intervention_site_counts": dict(sorted(site_counts.items())),
             "policy_action_counts": dict(sorted(action_counts.items())),
             "mean_activation_delta_norm_by_site": mean_delta_by_site,

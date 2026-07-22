@@ -26,7 +26,7 @@ from mfh.provenance import stable_hash
 
 ROOT = Path(__file__).parents[1]
 PROTOCOL = ROOT / "configs" / "analysis" / "confirmatory.yaml"
-MODEL = "mlx-community/Qwen3.6-27B-4bit"
+MODEL = "nvidia/Qwen3.6-27B-NVFP4"
 
 
 def test_artifact_derivation_opens_custom_e3_through_prerequisite_boundary(
@@ -90,30 +90,45 @@ def test_artifact_derivation_opens_custom_e3_through_prerequisite_boundary(
 
 def _runtime_identity() -> dict[str, object]:
     return {
-        "backend": "mlx",
-        "mlx": "0.31.0",
-        "mlx_lm": "0.31.3",
+        "backend": "vllm",
+        "vllm": "0.24.0",
+        "transformers": "5.2.0",
+        "torch": "2.11.0",
         "python": "3.12.0",
-        "machine_model": "Mac16,7",
-        "chip": "Apple M4 Max",
-        "unified_memory_bytes": 48 * 2**30,
-        "physical_cpu_cores": 12,
-        "architecture": "arm64",
-        "os": "macOS 15.5",
-        "os_build": "24F74",
-        "model_class": "mlx_lm.models.qwen3.Model",
+        "architecture": "x86_64",
+        "os": "Linux test",
+        "nvidia_driver": "570.00",
+        "gpu_name": "NVIDIA A100-SXM4-40GB",
+        "gpu_total_memory_bytes": 40_000_000_000,
+        "cuda_capability": "8.0",
+        "cuda_runtime": "12.9",
+        "tensor_parallel_size": 1,
+        "quantization_loader": "modelopt_mixed",
+        "quantization_config_class": (
+            "vllm.model_executor.layers.quantization.modelopt."
+            "ModelOptMixedPrecisionConfig"
+        ),
+        "quantization_execution": "marlin-w4a16-fp8-weight-only-on-sm80",
+        "model_class": (
+            "vllm.model_executor.models.qwen3_5."
+            "Qwen3_5ForConditionalGeneration"
+        ),
         "tokenizer_class": "transformers.Tokenizer",
         "num_layers": 64,
+        "hidden_size": 5_120,
         "seed": 17,
         "model_repository": MODEL,
         "model_revision": "a" * 40,
-        "model_quantization": "4bit",
+        "model_quantization": "modelopt-mixed-nvfp4-fp8",
         "model_num_layers": 64,
         "snapshot_sha256": "6" * 64,
         "research_provenance": {"study": "synthetic-test"},
         "research_toolchain": {
-            "xcodebuild": "Xcode 16.4",
-            "metal_compiler": "Metal 32023.155",
+            "vllm": "0.24.0",
+            "torch": "2.11.0",
+            "transformers": "5.2.0",
+            "numpy": "2.4.3",
+            "nvidia_driver": "570.00",
         },
     }
 
@@ -209,7 +224,7 @@ def _record(
         benchmark=benchmark,
         model_repository=MODEL,
         model_revision="a" * 40,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization="4bit",
         system_prompt_id=prompt,
         rendered_prompt_hash=stable_hash((identity, question)),
@@ -701,7 +716,7 @@ def test_final_analysis_is_derived_from_raw_phase_records(tmp_path: Path) -> Non
     results = derived.results
     assert results.likelihood_changes["triviaqa|P0-neutral|M0_to_M3"]["gold"] == pytest.approx(0.4)
     assert results.language_confusion["requested_detected_matrix"] == {"de:de": 4}
-    assert results.runtime_replication["local_mlx_execution"]["passed"] is True
+    assert results.runtime_replication["local_vllm_execution"]["passed"] is True
     assert results.primary_contrasts["RQ1"]["comparisons"]["RQ1:test"]["estimate"] == 0.1
     assert len(results.noninferiority["ifeval_pass_rate"]["comparisons"]) == 8
     aa_prompt = results.prompt_interactions["AA|M0|P-AA-official-vs-P0-neutral"]

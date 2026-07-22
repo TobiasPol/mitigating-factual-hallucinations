@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "repository": "nvidia/Qwen3.6-27B-NVFP4",
+  "revision": "0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+  "file_count": 17,
+  "total_size_bytes": 21941623844,
+  "files": [
+    {"path": ".gitattributes", "size_bytes": 1570, "digest_algorithm": "git-blob-sha1", "digest": "52373fe24473b1aa44333d318f578ae6bf04b49b"},
+    {"path": "README.md", "size_bytes": 9313, "digest_algorithm": "git-blob-sha1", "digest": "27f564b6eaebe625a6b541a2dd96e5922fad6bda"},
+    {"path": "chat_template.jinja", "size_bytes": 7764, "digest_algorithm": "git-blob-sha1", "digest": "a8755d827c0a7b614c246c4060dfd58ab352a8ff"},
+    {"path": "config.json", "size_bytes": 88567, "digest_algorithm": "git-blob-sha1", "digest": "a2c6098a06e597b62f217897d209ed6f986281c9"},
+    {"path": "configuration.json", "size_bytes": 51, "digest_algorithm": "git-blob-sha1", "digest": "3a6d425685de8896b2bc8b59b671e41aea1d7bf3"},
+    {"path": "generation_config.json", "size_bytes": 202, "digest_algorithm": "git-blob-sha1", "digest": "023756cfadf88e5bf69eefeee3e172f38c448d64"},
+    {"path": "hf_quant_config.json", "size_bytes": 54902, "digest_algorithm": "git-blob-sha1", "digest": "0563e0c8d07493464c067837bd6823b32f63f866"},
+    {"path": "model-00001-of-00003.safetensors", "size_bytes": 9965652512, "digest_algorithm": "sha256", "digest": "b4a0d9a57ff1859dac1144b53ca285011db072737d8813fc16d8d1e07ecae17d"},
+    {"path": "model-00002-of-00003.safetensors", "size_bytes": 9985757032, "digest_algorithm": "sha256", "digest": "06da4242b0f491118d19d4d4c7564307a7bd6059c6bed284e08c93f6fc5a556d"},
+    {"path": "model-00003-of-00003.safetensors", "size_bytes": 1970287640, "digest_algorithm": "sha256", "digest": "e90f5b2bb16814a0565de284ea179edec201edfb120d13f1debaab66f9e60845"},
+    {"path": "model.safetensors.index.json", "size_bytes": 214866, "digest_algorithm": "git-blob-sha1", "digest": "146d8eb292e9ffbfe4865b665069784720e57662"},
+    {"path": "preprocessor_config.json", "size_bytes": 390, "digest_algorithm": "git-blob-sha1", "digest": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"},
+    {"path": "processor_config.json", "size_bytes": 1191, "digest_algorithm": "git-blob-sha1", "digest": "33818c7f9e991ad735fd240209f4fa73e6c28c50"},
+    {"path": "tokenizer.json", "size_bytes": 12807982, "digest_algorithm": "sha256", "digest": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"},
+    {"path": "tokenizer_config.json", "size_bytes": 16718, "digest_algorithm": "git-blob-sha1", "digest": "28d96ff303d1d20350185caf4bf037045916ed35"},
+    {"path": "video_preprocessor_config.json", "size_bytes": 385, "digest_algorithm": "git-blob-sha1", "digest": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"},
+    {"path": "vocab.json", "size_bytes": 6722759, "digest_algorithm": "git-blob-sha1", "digest": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"}
+  ]
+}

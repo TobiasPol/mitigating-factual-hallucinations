@@ -18,8 +18,10 @@ from mfh.artifact_namespace import (
 from mfh.config import load_model_spec, load_prompt_specs
 from mfh.contracts import PromptSpec, Question
 from mfh.data.io import read_questions
+from mfh.data.reviewed_splits import validate_reviewed_split_snapshot
 from mfh.errors import ConfigurationError, DataValidationError, FrozenArtifactError
 from mfh.experiments.e3_construction import (
+    e3_questions_digest,
     finalize_e3_vector_bundle,
     prepare_e3_construction_work,
     run_e3_construction,
@@ -59,7 +61,7 @@ from mfh.experiments.e3_selection import (
 from mfh.experiments.model_selection import validate_active_model_spec
 from mfh.experiments.protocol import ExperimentPhase, StudyProtocol, load_study_protocol
 from mfh.experiments.runner import PhaseRunLedger
-from mfh.inference.mlx_research import MlxResearchRuntime
+from mfh.inference.vllm_research import VllmResearchRuntime
 from mfh.provenance import sha256_file, stable_hash
 
 _STAGES = (
@@ -72,17 +74,12 @@ _STAGES = (
     "final",
 )
 _SELECTION_STAGES = ("geometry", "alpha", "scope")
-_CONSTRUCTION_FINGERPRINTS = MappingProxyType(
+_CONSTRUCTION_FINGERPRINT_FIELDS = frozenset(
     {
-        "reviewed_split_manifest_digest": (
-            "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
-        ),
-        "review_result_manifest_digest": (
-            "6e03e98d9b09ee83fcfbbe5d1268ef42d2991467db043ecc345de84f64607f59"
-        ),
-        "t_steer_question_ids_sha256": (
-            "2493ffbd5c73c9f1b42e419e9ebf50860d6e53b2344324eed731b793ae7ec2a7"
-        ),
+        "reviewed_split_manifest_digest",
+        "review_result_manifest_digest",
+        "t_steer_question_ids_sha256",
+        "t_steer_questions_digest",
     }
 )
 _RUNBOOK_KEYS = {
@@ -174,7 +171,13 @@ class E3OperatorRunbook:
             or any(type(value) is not int or value <= 0 for value in numeric)
             or self.hidden_width != 5_120
             or self.max_new_tokens > 48
-            or dict(self.construction_input_fingerprints) != dict(_CONSTRUCTION_FINGERPRINTS)
+            or set(self.construction_input_fingerprints)
+            != _CONSTRUCTION_FINGERPRINT_FIELDS
+            or any(
+                len(value) != 64
+                or any(character not in "0123456789abcdef" for character in value)
+                for value in self.construction_input_fingerprints.values()
+            )
         ):
             raise DataValidationError("E3 runbook scientific geometry differs")
         object.__setattr__(self, "input_artifacts", MappingProxyType(dict(self.input_artifacts)))
@@ -275,7 +278,7 @@ def load_e3_operator_runbook(path: str | Path) -> E3OperatorRunbook:
         input_artifacts=_path_mapping(
             raw["input_artifacts"],
             label="input_artifacts",
-            expected={"E1_outcome_labels", "activation_feature_schemas"},
+            expected={"E1_outcome_labels", "activation_feature_schemas", "reviewed_splits"},
         ),
         prerequisite_runs=_path_mapping(
             raw["prerequisite_runs"],
@@ -291,19 +294,39 @@ def load_e3_operator_runbook(path: str | Path) -> E3OperatorRunbook:
     )
 
 
-def write_e3_operator_runbook_template(destination: str | Path) -> Path:
+def write_e3_operator_runbook_template(
+    destination: str | Path, *, reviewed_splits: str | Path
+) -> Path:
     output = Path(destination)
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists() or output.is_symlink():
         raise FrozenArtifactError(f"refusing to overwrite E3 runbook: {output}")
     workspace = Path.cwd().resolve()
     study_root = workspace / QWEN_STUDY_ARTIFACT_ROOT
+    reviewed_root = validate_active_study_artifact_paths(
+        {"E3 reviewed splits": reviewed_splits}
+    )["E3 reviewed splits"]
+    reviewed_manifest = validate_reviewed_split_snapshot(reviewed_root)
+    t_steer = tuple(read_questions(reviewed_root / "T-steer.jsonl"))
+    split_ids = reviewed_manifest.get("split_question_ids_sha256")
+    if not isinstance(split_ids, Mapping) or not isinstance(
+        split_ids.get("T-steer"), str
+    ):
+        raise DataValidationError("reviewed split lacks the T-steer identity")
+    construction_fingerprints = {
+        "reviewed_split_manifest_digest": str(reviewed_manifest["manifest_digest"]),
+        "review_result_manifest_digest": str(
+            reviewed_manifest["review_result_manifest_digest"]
+        ),
+        "t_steer_question_ids_sha256": str(split_ids["T-steer"]),
+        "t_steer_questions_digest": e3_questions_digest(t_steer),
+    }
     body = {
         "schema_version": 1,
-        "model_config": str(workspace / "configs/models/qwen3.6-27b-mlx-4bit.yaml"),
+        "model_config": str(workspace / "configs/models/qwen3.6-27b-nvfp4.yaml"),
         "snapshot_directory": str(workspace / "operator-inputs/model-snapshot"),
-        "t_steer_questions": str(workspace / "artifacts/splits/triviaqa-reviewed/T-steer.jsonl"),
-        "t_dev_questions": str(workspace / "artifacts/splits/triviaqa-reviewed/T-dev.jsonl"),
+        "t_steer_questions": str(reviewed_root / "T-steer.jsonl"),
+        "t_dev_questions": str(reviewed_root / "T-dev.jsonl"),
         "prompt_config": str(workspace / "configs/prompts/primary.yaml"),
         "study_protocol": str(workspace / "configs/experiments/phases.yaml"),
         "source_runtime_plan": str(workspace / "operator-inputs/E2-capture-plan.json"),
@@ -313,6 +336,7 @@ def write_e3_operator_runbook_template(destination: str | Path) -> Path:
             "activation_feature_schemas": str(
                 study_root / "E2/activation-feature-schemas"
             ),
+            "reviewed_splits": str(reviewed_root),
         },
         "prerequisite_runs": {
             "E1": str(study_root / "runs/E1"),
@@ -322,7 +346,7 @@ def write_e3_operator_runbook_template(destination: str | Path) -> Path:
         "construction_checkpoint_rows": 64,
         "shuffle_checkpoint_rows": 64,
         "max_new_tokens": 48,
-        "construction_input_fingerprints": dict(_CONSTRUCTION_FINGERPRINTS),
+        "construction_input_fingerprints": construction_fingerprints,
     }
     descriptor, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent)
     try:
@@ -444,11 +468,11 @@ def preflight_e3_operator(runbook: E3OperatorRunbook) -> Mapping[str, Any]:
     )
 
 
-def _live_runtime(context: _E3Context) -> MlxResearchRuntime:
+def _live_runtime(context: _E3Context) -> VllmResearchRuntime:
     model = load_model_spec(context.runbook.model_config)
     provenance = context.source_runtime_identity["research_provenance"]
     assert isinstance(provenance, Mapping)
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         model,
         snapshot_path=context.runbook.snapshot_directory,
         seed=17,
@@ -475,7 +499,7 @@ def _stage_questions(context: _E3Context, stage: str) -> tuple[Question, ...]:
 
 def _stage_assets(
     context: _E3Context,
-    runtime: MlxResearchRuntime,
+    runtime: VllmResearchRuntime,
     *,
     stage: str,
     predecessor: VerifiedE3StageSelection | None,
@@ -501,7 +525,7 @@ def _stage_assets(
 
 def _load_selections(
     context: _E3Context,
-    runtime: MlxResearchRuntime,
+    runtime: VllmResearchRuntime,
 ) -> tuple[dict[str, VerifiedE3StageSelection], dict[str, E3ExecutionAssets]]:
     selections: dict[str, VerifiedE3StageSelection] = {}
     assets: dict[str, E3ExecutionAssets] = {}
@@ -710,7 +734,7 @@ def advance_e3_operator(
 
 def _all_stage_materials(
     context: _E3Context,
-    runtime: MlxResearchRuntime,
+    runtime: VllmResearchRuntime,
 ) -> tuple[
     dict[str, Path],
     dict[str, E3ExecutionAssets],
@@ -739,7 +763,7 @@ def _all_stage_materials(
 
 def _finalize_or_verify_phase(
     context: _E3Context,
-    runtime: MlxResearchRuntime,
+    runtime: VllmResearchRuntime,
 ) -> Mapping[str, Any]:
     stage_runs, assets, questions, selections = _all_stage_materials(context, runtime)
     if not context.paths.phase.exists():

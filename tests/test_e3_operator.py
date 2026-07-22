@@ -13,10 +13,10 @@ from mfh.artifact_namespace import (
 from mfh.artifact_namespace import (
     validate_active_study_artifact_paths as _real_namespace_validator,
 )
+from mfh.contracts import Question
 from mfh.errors import ConfigurationError, DataValidationError, FrozenArtifactError
 from mfh.experiments import e3_controls, e3_runner
 from mfh.experiments.e3_operator import (
-    _CONSTRUCTION_FINGERPRINTS,
     E3OperatorRunbook,
     _E3Context,
     _E3Paths,
@@ -27,6 +27,15 @@ from mfh.experiments.e3_operator import (
     write_e3_operator_runbook_template,
 )
 from mfh.experiments.protocol import ExperimentPhase
+
+_CONSTRUCTION_FINGERPRINTS = MappingProxyType(
+    {
+        "reviewed_split_manifest_digest": "a" * 64,
+        "review_result_manifest_digest": "b" * 64,
+        "t_steer_question_ids_sha256": "c" * 64,
+        "t_steer_questions_digest": "d" * 64,
+    }
+)
 
 
 def _runbook(tmp_path: Path) -> E3OperatorRunbook:
@@ -43,6 +52,7 @@ def _runbook(tmp_path: Path) -> E3OperatorRunbook:
             "runtime.json",
             "E1-input",
             "E2-input",
+            "reviewed-splits",
             "E1-run",
             "E2-run",
         )
@@ -61,6 +71,7 @@ def _runbook(tmp_path: Path) -> E3OperatorRunbook:
             {
                 "E1_outcome_labels": paths["E1-input"],
                 "activation_feature_schemas": paths["E2-input"],
+                "reviewed_splits": paths["reviewed-splits"],
             }
         ),
         prerequisite_runs=MappingProxyType({"E1": paths["E1-run"], "E2": paths["E2-run"]}),
@@ -87,8 +98,34 @@ def _context(runbook: E3OperatorRunbook) -> _E3Context:
     )
 
 
+def _write_template(tmp_path: Path) -> Path:
+    reviewed = Path.cwd().resolve() / QWEN_STUDY_ARTIFACT_ROOT / "frozen/reviewed-splits"
+    question = Question(
+        question_id="q-1",
+        benchmark="triviaqa",
+        text="Question?",
+        aliases=("answer",),
+        split="T-steer",
+    )
+    with (
+        patch(
+            "mfh.experiments.e3_operator.validate_reviewed_split_snapshot",
+            return_value={
+                "manifest_digest": "a" * 64,
+                "review_result_manifest_digest": "b" * 64,
+                "split_question_ids_sha256": {"T-steer": "c" * 64},
+            },
+        ),
+        patch("mfh.experiments.e3_operator.read_questions", return_value=(question,)),
+        patch("mfh.experiments.e3_operator.e3_questions_digest", return_value="d" * 64),
+    ):
+        return write_e3_operator_runbook_template(
+            tmp_path / "e3-runbook.json", reviewed_splits=reviewed
+        )
+
+
 def test_e3_runbook_template_is_secret_free_and_round_trips(tmp_path: Path) -> None:
-    path = write_e3_operator_runbook_template(tmp_path / "e3-runbook.json")
+    path = _write_template(tmp_path)
     text = path.read_text(encoding="utf-8")
     assert "HF_TOKEN" not in text and "api_key" not in text and ".env" not in text
     runbook = load_e3_operator_runbook(path)
@@ -101,7 +138,7 @@ def test_e3_runbook_template_is_secret_free_and_round_trips(tmp_path: Path) -> N
 
 
 def test_e3_runbook_rejects_noncanonical_paths(tmp_path: Path) -> None:
-    path = write_e3_operator_runbook_template(tmp_path / "e3-runbook.json")
+    path = _write_template(tmp_path)
     value = json.loads(path.read_text(encoding="utf-8"))
     value["model_config"] = "configs/models/qwen.yaml"
     path.write_text(json.dumps(value), encoding="utf-8")
@@ -173,7 +210,7 @@ def test_e3_preflight_rejects_output_outside_active_study(tmp_path: Path) -> Non
 
 
 def test_e3_execution_uses_approved_m4_max_memory_envelope() -> None:
-    approved = 51_539_607_552
+    approved = 42_949_672_960
     assert approved == e3_runner._UNIFIED_MEMORY_BYTES
     assert approved == e3_controls._UNIFIED_MEMORY_BYTES
 

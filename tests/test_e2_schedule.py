@@ -73,11 +73,11 @@ def _fixture() -> tuple[
 
 def _model() -> ModelSpec:
     return ModelSpec(
-        name="qwen3.6-27b-mlx-4bit",
-        repository="mlx-community/Qwen3.6-27B-4bit",
-        revision="c000ac2c2057d94be3fa931000c31723aac53282",
-        runtime=Runtime.MLX,
-        quantization="affine-g64-mlx-4bit",
+        name="qwen3.6-27b-nvfp4",
+        repository="nvidia/Qwen3.6-27B-NVFP4",
+        revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+        runtime=Runtime.VLLM,
+        quantization="modelopt-mixed-nvfp4-fp8",
         num_layers=64,
     )
 

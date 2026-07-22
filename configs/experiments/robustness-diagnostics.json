@@ -3,9 +3,7 @@
   "diagnostic_id": "prompt-rq1-robustness-v1",
   "freeze_boundary": "freeze-before-E9-and-never-use-for-E9-or-E10-component-selection",
   "reviewed_split_binding": {
-    "manifest_digest": "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148",
-    "artifact_sha256": "3ceaf111654b80e34abd568853f64bba894fc7c6d7a81950c2868f3584a187f4",
-    "required_e1_state": "complete-qwen3.6-27b-mlx-4bit-E1-ledger-deduplicated-splits-input"
+    "required_e1_state": "complete-qwen3.6-27b-nvfp4-E1-ledger-deduplicated-splits-input"
   },
   "prompt_paraphrase": {
     "selection_seed": 1701,
@@ -125,5 +123,5 @@
     "test_data_policy": "held-out-fold-T-dev-is-evaluation-only-and-never-used-for-fitting",
     "target_benchmark_tuning_policy": "no-SimpleQA-AA-E9-or-E10-row-may-fit-or-select-any-component"
   },
-  "config_digest": "06da1e24b298361df6cd6cdad7753813001f8b09b8f12598d2b87f8a7d6a69fd"
+  "config_digest": "bf80d9a913ddd1d527670325dffa19f0d4597741f7e497909d2f844b3d81fbc2"
 }

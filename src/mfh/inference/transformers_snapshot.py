@@ -172,11 +172,11 @@ def load_snapshot_manifest(
     ):
         raise ConfigurationError("snapshot manifest totals differ from its files")
     if model_spec is not None and (
-        model_spec.runtime is not Runtime.MLX
+        model_spec.runtime is not Runtime.VLLM
         or manifest.repository != model_spec.repository
         or manifest.revision != model_spec.revision
     ):
-        raise ConfigurationError("snapshot manifest differs from the MLX model spec")
+        raise ConfigurationError("snapshot manifest differs from the vLLM model spec")
     return manifest
 
 

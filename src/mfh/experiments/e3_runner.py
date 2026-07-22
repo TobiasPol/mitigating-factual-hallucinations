@@ -1,4 +1,4 @@
-"""Resumable hash-chained staged E3 evaluation on the native MLX executor."""
+"""Resumable hash-chained staged E3 evaluation on the native VLLM executor."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ _SCREEN_STAGES = frozenset(
     {"geometry", "alpha", "scope", "controls", "cross-prompt", "P3-diagnostic"}
 )
 _ALL_STAGES = (*sorted(_SCREEN_STAGES), "final")
-_UNIFIED_MEMORY_BYTES = 51_539_607_552
+_UNIFIED_MEMORY_BYTES = 42_949_672_960
 _SCHEDULE_SEED = 17
 
 

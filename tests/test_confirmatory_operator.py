@@ -93,16 +93,16 @@ def test_template_fixed_paths_match_documented_study_layout(tmp_path: Path) -> N
     configs = tmp_path / "configs"
     fixed_files = (
         configs / "experiments/phases.yaml",
-        configs / "models/qwen3.6-27b-mlx-4bit.yaml",
+        configs / "models/qwen3.6-27b-nvfp4.yaml",
         configs / "prompts/primary.yaml",
-        configs / "models/qwen3.6-27b-mlx-4bit.snapshot.json",
+        configs / "models/qwen3.6-27b-nvfp4.snapshot.json",
     )
     for fixed in fixed_files:
         fixed.parent.mkdir(parents=True, exist_ok=True)
         fixed.touch()
-    snapshot = tmp_path / "artifacts/models/qwen3.6-27b-mlx-4bit/SNAPSHOT"
+    snapshot = tmp_path / "artifacts/models/qwen3.6-27b-nvfp4/SNAPSHOT"
     snapshot.mkdir(parents=True)
-    study = tmp_path / "artifacts/studies/qwen36-27b-mlx4-m4max48-v1"
+    study = tmp_path / "artifacts/studies/qwen36-27b-nvfp4-a10040-v1"
     runbook_path = study / "operator-inputs/E9-runbook.json"
 
     write_confirmatory_runbook_template(runbook_path, phase=ExperimentPhase.E9)

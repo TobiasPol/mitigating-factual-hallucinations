@@ -1,4 +1,4 @@
-"""Resumable, provenance-bound native-MLX operator lifecycle for E6."""
+"""Resumable, provenance-bound native-VLLM operator lifecycle for E6."""
 
 from __future__ import annotations
 
@@ -72,11 +72,11 @@ from mfh.experiments.runner import (
     open_phase_prerequisite,
     write_frozen_question_bundle,
 )
-from mfh.inference.mlx_research import (
-    MlxResearchInterventionState,
-    MlxResearchRuntime,
-)
 from mfh.inference.transformers_snapshot import verify_transformers_snapshot
+from mfh.inference.vllm_research import (
+    VllmResearchInterventionState,
+    VllmResearchRuntime,
+)
 from mfh.methods.adaptive import AdaptiveController
 from mfh.provenance import sha256_file, sha256_path, stable_hash
 
@@ -247,11 +247,22 @@ class E6Runbook:
         )
 
 
-def write_e6_runbook_template(path: str | Path, *, m1_layer: int) -> str:
-    """Write a secret-free E6 runbook template for the M4 Max execution host."""
+def write_e6_runbook_template(
+    path: str | Path,
+    *,
+    m1_layer: int,
+    official_grader_bundle: str | Path,
+    expected_grader_manifest_digest: str,
+) -> str:
+    """Write a secret-free E6 runbook template for the A100 execution host."""
 
     if isinstance(m1_layer, bool) or not isinstance(m1_layer, int) or not 0 <= m1_layer < 64:
         raise DataValidationError("E6 M1 layer must be an explicit Qwen layer index")
+    if (
+        len(expected_grader_manifest_digest) != 64
+        or any(character not in "0123456789abcdef" for character in expected_grader_manifest_digest)
+    ):
+        raise DataValidationError("E6 grader manifest must be a lowercase SHA-256 digest")
     destination = Path(path).resolve()
     if destination.exists() or destination.is_symlink():
         raise FrozenArtifactError(f"refusing to overwrite E6 runbook: {destination}")
@@ -259,18 +270,18 @@ def write_e6_runbook_template(path: str | Path, *, m1_layer: int) -> str:
         "schema_version": 1,
         "phase": "E6",
         "study_protocol": "../../../../configs/experiments/phases.yaml",
-        "model_config": "../../../../configs/models/qwen3.6-27b-mlx-4bit.yaml",
+        "model_config": "../../../../configs/models/qwen3.6-27b-nvfp4.yaml",
         "prompt_config": "../../../../configs/prompts/primary.yaml",
         "snapshot_directory": (
-            "../../../models/qwen3.6-27b-mlx-4bit/"
-            "c000ac2c2057d94be3fa931000c31723aac53282"
+            "../../../models/qwen3.6-27b-nvfp4/"
+            "0893e1606ff3d5f97a441f405d5fc541a6bdf404"
         ),
-        "snapshot_manifest": "../../../../configs/models/qwen3.6-27b-mlx-4bit.snapshot.json",
+        "snapshot_manifest": "../../../../configs/models/qwen3.6-27b-nvfp4.snapshot.json",
         "frozen_question_bundle": "../frozen/E6-questions",
-        "official_grader_bundle": "../../../../artifacts/graders/e1-frozen-v2",
-        "expected_grader_manifest_digest": (
-            "b3af3c847c3488d6228a47c205186caca06bca8de1cd00dd81f0b83ac73e1159"
+        "official_grader_bundle": os.path.relpath(
+            Path(official_grader_bundle).resolve(), start=destination.parent
         ),
+        "expected_grader_manifest_digest": expected_grader_manifest_digest,
         "environment_file": "../../../../.env",
         "e3_static_vectors": "../E3-operator/vectors",
         "e5_adaptive_controllers": "../frozen/E5-phase/selected-controller",
@@ -298,7 +309,7 @@ def freeze_e6_question_bundle(
     expected_reviewed_split_manifest_digest: str,
     source_artifacts: Mapping[str, str | Path],
     study_protocol: str | Path = "configs/experiments/phases.yaml",
-    model_config: str | Path = "configs/models/qwen3.6-27b-mlx-4bit.yaml",
+    model_config: str | Path = "configs/models/qwen3.6-27b-nvfp4.yaml",
     prompt_config: str | Path = "configs/prompts/primary.yaml",
     seed: int = 17,
 ) -> Mapping[str, Any]:
@@ -847,8 +858,8 @@ def prepare_e6_runbook(runbook: E6Runbook) -> PhaseRunLedger:
 
 def _native_runtime(
     runbook: E6Runbook, context: _E6Context
-) -> tuple[MlxResearchRuntime, E6RuntimeAttestor]:
-    runtime = MlxResearchRuntime.from_spec(
+) -> tuple[VllmResearchRuntime, E6RuntimeAttestor]:
+    runtime = VllmResearchRuntime.from_spec(
         context.model,
         snapshot_path=runbook.snapshot_directory,
         seed=runbook.seed,
@@ -868,7 +879,7 @@ def _native_runtime(
 
 
 def attest_e6_runtime(runbook: E6Runbook) -> Mapping[str, Any]:
-    """Load pinned Qwen through MLX and freeze/replay the machine attestation."""
+    """Load pinned Qwen through VLLM and freeze/replay the machine attestation."""
 
     context = _context(runbook)
     runtime, attestor = _native_runtime(runbook, context)
@@ -889,7 +900,7 @@ def attest_e6_runtime(runbook: E6Runbook) -> Mapping[str, Any]:
 
 def _draft_record(
     *,
-    runtime: MlxResearchRuntime,
+    runtime: VllmResearchRuntime,
     condition: EvaluationCondition,
     question: Question,
     prompt: PromptSpec,
@@ -934,14 +945,14 @@ def _draft_record(
 def _m1_state_factory(
     context: _E6Context,
     condition: EvaluationCondition,
-    runtime: MlxResearchRuntime,
-) -> Callable[[], Mapping[int, MlxResearchInterventionState]]:
+    runtime: VllmResearchRuntime,
+) -> Callable[[], Mapping[int, VllmResearchInterventionState]]:
     assert condition.layer is not None
     assert condition.token_scope is not None
     layer = condition.layer
     scope = condition.token_scope
 
-    def factory() -> Mapping[int, MlxResearchInterventionState]:
+    def factory() -> Mapping[int, VllmResearchInterventionState]:
         state = runtime.standardized_intervention_state(
             context.m1_direction,
             standardized_alpha=condition.alpha,
@@ -956,8 +967,8 @@ def _m1_state_factory(
 def _adaptive_state_factory(
     context: _E6Context,
     record: GenerationRecord,
-    runtime: MlxResearchRuntime,
-) -> Callable[[], Mapping[int, MlxResearchInterventionState]] | None:
+    runtime: VllmResearchRuntime,
+) -> Callable[[], Mapping[int, VllmResearchInterventionState]] | None:
     if record.metadata.get("policy_action") == "release":
         return None
     evidence = record.metadata.get("adaptive_controller_evidence")
@@ -990,7 +1001,7 @@ def _adaptive_state_factory(
     ):
         raise FrozenArtifactError("E6 M3 routed direction differs from its signed trace")
 
-    def factory() -> Mapping[int, MlxResearchInterventionState]:
+    def factory() -> Mapping[int, VllmResearchInterventionState]:
         state = runtime.standardized_intervention_state(
             normalized,
             standardized_alpha=record.alpha * norm,
@@ -1006,7 +1017,7 @@ def _execute_row(
     *,
     runbook: E6Runbook,
     context: _E6Context,
-    runtime: MlxResearchRuntime,
+    runtime: VllmResearchRuntime,
     attestor: E6RuntimeAttestor,
     condition: EvaluationCondition,
     question: Question,

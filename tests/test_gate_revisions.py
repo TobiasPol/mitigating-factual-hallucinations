@@ -35,7 +35,7 @@ def test_legacy_e0_revision_whitelist_is_exact() -> None:
         "deterministic_decode": frozenset(
             {"fc62b00e14720ab1f9966201f4c51a6b4bc827737fb8885f78b787e6e699543e"}
         ),
-        "mlx_runtime_identity": frozenset(
+        "vllm_runtime_identity": frozenset(
             {"49798c198f3e1cfc3577a7dc9b0bd390a2ccd06f532d5f4de59bb5d8072f8a42"}
         ),
     }

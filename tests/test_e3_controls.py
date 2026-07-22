@@ -65,14 +65,14 @@ from mfh.experiments.e3_selection import (
     load_verified_e3_stage_selection,
     write_e3_stage_selection,
 )
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxTeacherForcedCubeOutput,
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmTeacherForcedCubeOutput,
 )
-from mfh.inference.mlx_runtime import (
-    MlxGenerationOutput,
-    MlxInterventionState,
-    MlxRenderedPrompt,
+from mfh.inference.vllm_runtime import (
+    VllmGenerationOutput,
+    VllmInterventionState,
+    VllmRenderedPrompt,
 )
 from mfh.provenance import sha256_file, stable_hash
 
@@ -118,7 +118,7 @@ class _VariedRuntime:
         self.generate_calls = 0
 
     def runtime_identity(self) -> Mapping[str, Any]:
-        return {"runtime": "fake-mlx", "revision": "a" * 40}
+        return {"runtime": "fake-vllm", "revision": "a" * 40}
 
     def render_prompt(
         self,
@@ -126,12 +126,12 @@ class _VariedRuntime:
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         del metadata
         text = f"{prompt.prompt_id}|{question}"
         index = int(question.split()[1].rstrip("?"))
         tokens = (100 + index, 200 + len(prompt.prompt_id))
-        return MlxRenderedPrompt(
+        return VllmRenderedPrompt(
             text=text,
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             token_ids=tokens,
@@ -139,13 +139,15 @@ class _VariedRuntime:
             messages=(),
         )
 
-    def generate(self, rendered: MlxRenderedPrompt, *, max_new_tokens: int) -> MlxGenerationOutput:
+    def generate(
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 8
         self.generate_calls += 1
         index = int(rendered.text.split("Question ")[1].rstrip("?"))
         text = f"answer-{index}" if index % 2 == 0 else "wrong"
         token_ids = (300 + index,)
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=token_ids,
             text=text,
@@ -161,20 +163,20 @@ class _VariedRuntime:
             cache_memory_bytes=256,
         )
 
-    def _base(self, rendered: MlxRenderedPrompt) -> float:
+    def _base(self, rendered: VllmRenderedPrompt) -> float:
         text = rendered.text
         index = int(text.split("Question ")[1].rstrip("?"))
         return (3.0 if index % 2 == 0 else 1.0) + index / 10
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput:
+    ) -> VllmPromptFeatureCubeOutput:
         base = self._base(rendered)
-        return MlxPromptFeatureCubeOutput(
+        return VllmPromptFeatureCubeOutput(
             activations={
                 site: {
                     layer: np.asarray([[base + layer, 1.0, 0.5]], dtype=np.float32)
@@ -189,15 +191,15 @@ class _VariedRuntime:
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxTeacherForcedCubeOutput:
+    ) -> VllmTeacherForcedCubeOutput:
         base = self._base(rendered) + 1.0
         token_ids = (900,)
-        return MlxTeacherForcedCubeOutput(
+        return VllmTeacherForcedCubeOutput(
             response_text_sha256=hashlib.sha256(response.encode()).hexdigest(),
             response_token_ids=token_ids,
             response_token_ids_sha256=_token_digest(token_ids),
@@ -223,8 +225,8 @@ class _VariedRuntime:
         reference_rms: float,
         token_scope: TokenScope,
         decay: float = 0.0,
-    ) -> MlxInterventionState:
-        return MlxInterventionState(
+    ) -> VllmInterventionState:
+        return VllmInterventionState(
             direction=np.asarray(direction, dtype=np.float32).copy(),
             alpha=standardized_alpha * reference_rms,
             token_scope=token_scope,
@@ -233,11 +235,11 @@ class _VariedRuntime:
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
-        intervention_states: Mapping[tuple[int, ActivationSite], MlxInterventionState],
-    ) -> MlxGenerationOutput:
+        intervention_states: Mapping[tuple[int, ActivationSite], VllmInterventionState],
+    ) -> VllmGenerationOutput:
         assert len(intervention_states) == 1
         state = next(iter(intervention_states.values()))
         width = int(np.asarray(state.direction).shape[0])

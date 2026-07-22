@@ -31,7 +31,7 @@ from mfh.evaluation.openrouter import (
     run_openrouter_grader,
     validate_openrouter_attempt_receipt,
 )
-from mfh.experiments.e1_mlx import (
+from mfh.experiments.e1_vllm import (
     E1Prepared,
     _append_jsonl,
     _atomic_json,
@@ -51,7 +51,7 @@ from mfh.experiments.grader_bundle import verify_e1_grader_bundle
 from mfh.experiments.model_selection import validate_active_study_artifact_paths
 from mfh.experiments.protocol import ExperimentPhase
 from mfh.experiments.runner import EvaluationCondition, PhaseRunLedger
-from mfh.inference.mlx_runtime import MlxRuntime
+from mfh.inference.vllm_runtime import VllmRuntime
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
 
 _BENCHMARK = "aa_omniscience_public_600"
@@ -64,7 +64,7 @@ _OFFICIAL_PROMPT_TEXT = (
 )
 _SEED = 17
 _ROW_COUNT = 600
-_MEMORY_BYTES = 48 * 1024**3
+_MEMORY_BYTES = 40 * 1024**3
 _WORK_FILES = frozenset({"plan.json", "records.jsonl", "failures.jsonl", "sessions.jsonl"})
 _OUTPUT_FILES = frozenset(
     {
@@ -245,7 +245,7 @@ def _context(
         "phase": "E1-AA-official-auxiliary",
         "track": "AA-Omniscience-Public-600 official answerer prompt and scoring",
         "runner_source_sha256": sha256_file(Path(__file__)),
-        "e1_runner_source_sha256": sha256_file(Path(__file__).with_name("e1_mlx.py")),
+        "e1_runner_source_sha256": sha256_file(Path(__file__).with_name("e1_vllm.py")),
         "study_protocol_digest": base.study.digest,
         "e1_contract_digest": base.contract.digest,
         "e1_completion_digest": completion.completion_digest,
@@ -736,7 +736,7 @@ def run_aa_official_track(
             else "an AA official resume checkpoint cannot initialize execution"
         )
     factory = runtime_factory or (
-        lambda model, snapshot: MlxRuntime.from_spec(model, snapshot_path=snapshot, seed=_SEED)
+        lambda model, snapshot: VllmRuntime.from_spec(model, snapshot_path=snapshot, seed=_SEED)
     )
     runtime: _Runtime | None = None
     rows: list[dict[str, Any]] = []
@@ -1171,7 +1171,7 @@ def finalize_aa_official_track(
         + [int(row["generation"]["peak_memory_bytes"]) for row in failures]
     )
     if peak > _MEMORY_BYTES:
-        raise FrozenArtifactError("AA official track exceeded the 48 GiB Apple envelope")
+        raise FrozenArtifactError("AA official track exceeded the 40 GB A100 envelope")
     output = Path(output_directory).absolute()
     if output.exists() or output.is_symlink():
         raise FrozenArtifactError(f"refusing to overwrite AA official result: {output}")
@@ -1470,7 +1470,7 @@ def _portable_plan_semantics(plan: Mapping[str, Any]) -> None:
             "quantization",
             "num_layers",
         }
-        or model.get("runtime") != "mlx"
+        or model.get("runtime") != "vllm"
         or not isinstance(model.get("repository"), str)
         or "/" not in model["repository"]
         or not isinstance(model.get("revision"), str)
@@ -1650,7 +1650,7 @@ def load_aa_official_analysis(
         or condition.benchmark != _BENCHMARK
         or condition.system_prompt_id != _PROMPT_ID
         or condition.steering_method != "M0"
-        or condition.runtime.value != "mlx"
+        or condition.runtime.value != "vllm"
         or condition.seed != _SEED
         or condition.comparison_group != "aa-official-auxiliary"
         or condition.prompt_template_sha256

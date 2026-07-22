@@ -59,7 +59,7 @@ from mfh.provenance import sha256_file, sha256_path, stable_hash
 
 ROOT = Path(__file__).parents[1]
 MODEL_CONFIGS = {
-    "qwen3.6-27b-mlx-4bit": ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml",
+    "qwen3.6-27b-nvfp4": ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml",
 }
 _EXECUTION_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 _EXECUTION_PUBLIC_KEY = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
@@ -273,7 +273,7 @@ def _e10_contract(study: StudyProtocol, prompt_id: str) -> PhaseRunContract:
             study_protocol_digest=study.digest,
             adaptive_policy=_adaptive_policy(),
         )
-        for model_name, model in _models("qwen3.6-27b-mlx-4bit").items()
+        for model_name, model in _models("qwen3.6-27b-nvfp4").items()
         for benchmark in phase.benchmarks
     )
     return PhaseRunContract(
@@ -308,7 +308,7 @@ def _gate_results(ledger: PhaseRunLedger, directory: Path) -> dict[str, GateResu
             for record in repeated
         ],
         "chat_template_identity": [],
-        "mlx_runtime_identity": [],
+        "vllm_runtime_identity": [],
     }
     results: dict[str, GateResult] = {}
     for gate in ledger.contract.required_gates:
@@ -329,16 +329,21 @@ def _scientific_e0_receipt(directory: Path) -> tuple[Path, str]:
     root = directory / "E0-scientific-receipt"
     root.mkdir()
     body = {
-        "schema_version": 1,
+        "schema_version": 2,
         "phase": "E0",
         "scope": "scientific-runtime-validation-after-manual-contamination-review",
         "source_manifests": {
-            "mlx_runtime": "a" * 64,
+            "vllm_runtime": "a" * 64,
             "contamination_review": "b" * 64,
             "contamination_review_queue": "c" * 64,
             "runtime_validation_cohort": "d" * 64,
+            "e1_grader_bundle": "1" * 64,
+            "reviewed_splits": "2" * 64,
         },
-        "mlx_plan_identity": "e" * 64,
+        "grader_bundle_sha256": "3" * 64,
+        "reviewed_splits_sha256": "4" * 64,
+        "grader_fingerprints": {"grader": "5" * 64},
+        "vllm_plan_identity": "e" * 64,
         "review_counts": {
             "reviewed": 200,
             "overlap": 0,
@@ -364,7 +369,7 @@ def _scientific_e0_receipt(directory: Path) -> tuple[Path, str]:
         encoding="utf-8",
     )
     manifest_body = {
-        "schema_version": 1,
+        "schema_version": 2,
         "phase": "E0",
         "purpose": "scientific-e0-completion-receipt",
         "receipt_digest": receipt["receipt_digest"],
@@ -392,15 +397,19 @@ def _verified_scientific_e0_receipt(directory: Path) -> VerifiedE0CompletionRece
         return authorize_e0_completion_receipt(
             receipt,
             expected_manifest_digest=manifest_digest,
-            mlx_directory=directory / "mlx",
-            expected_mlx_manifest_digest="a" * 64,
-            expected_mlx_plan_identity="e" * 64,
-            mlx_inputs={},
+            vllm_directory=directory / "vllm",
+            expected_vllm_manifest_digest="a" * 64,
+            expected_vllm_plan_identity="e" * 64,
+            vllm_inputs={},
             review_result_directory=directory / "review-result",
             expected_review_result_manifest_digest="b" * 64,
             review_queue_directory=directory / "review-queue",
             expected_review_queue_manifest_digest="c" * 64,
             review_inputs={},
+            grader_bundle=directory / "graders",
+            expected_grader_manifest_digest="1" * 64,
+            reviewed_splits=directory / "reviewed-splits",
+            expected_reviewed_split_manifest_digest="2" * 64,
         )
 
 
@@ -653,7 +662,7 @@ class StudyProtocolTests(unittest.TestCase):
 
     def test_factorial_expansion_matches_confirmatory_matrix(self) -> None:
         study = _study()
-        models = _models("qwen3.6-27b-mlx-4bit")
+        models = _models("qwen3.6-27b-nvfp4")
         prompts = _prompts()
         partitions = {
             "triviaqa": "T-test",
@@ -1596,7 +1605,7 @@ class PhaseRunLedgerTests(unittest.TestCase):
             conditions = expand_factorial_conditions(
                 study,
                 "E1",
-                models=_models("qwen3.6-27b-mlx-4bit"),
+                models=_models("qwen3.6-27b-nvfp4"),
                 prompts=_prompts(),
                 benchmark_partitions={
                     "triviaqa": "T-dev",

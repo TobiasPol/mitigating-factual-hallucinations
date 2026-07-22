@@ -1,4 +1,4 @@
-"""Signed, resumable native-MLX execution for the complete E5 ablation grid."""
+"""Signed, resumable native-VLLM execution for the complete E5 ablation grid."""
 
 from __future__ import annotations
 
@@ -63,8 +63,8 @@ from mfh.experiments.static_direction_sources import (
     ResolvedStaticDirection,
     resolve_static_direction,
 )
-from mfh.inference.mlx_research import MlxPromptFeatureCubeOutput
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_research import VllmPromptFeatureCubeOutput
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.methods.adaptive import AdaptiveController
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
 
@@ -88,14 +88,14 @@ _TOKEN_SCOPES = MappingProxyType(
         "first_four_generated": TokenScope.FIRST_FOUR,
     }
 )
-_MAX_MEMORY_BYTES = 48 * 1024**3
+_MAX_MEMORY_BYTES = 40 * 1024**3
 _MAX_NEW_TOKENS = 48
 _SCHEDULE_RULE = "arm-major-m1-then-grid__prompt-p0-p2__screen-dev-order-v1"
 _ACTIVE_MODEL = ACTIVE_MODEL_IDENTITIES[ACTIVE_MODEL_NAME]
 
 
 class E5NativeRuntime(Protocol):
-    """Minimal native MLX surface required by the E5 developmental ablation."""
+    """Minimal native VLLM surface required by the E5 developmental ablation."""
 
     def runtime_identity(self) -> Mapping[str, Any]: ...
 
@@ -105,15 +105,15 @@ class E5NativeRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput: ...
+    ) -> VllmPromptFeatureCubeOutput: ...
 
     def standardized_intervention_state(
         self,
@@ -127,11 +127,11 @@ class E5NativeRuntime(Protocol):
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[tuple[int, ActivationSite], Any],
-    ) -> MlxGenerationOutput: ...
+    ) -> VllmGenerationOutput: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -1759,8 +1759,8 @@ def _execute_native_row(
     prompt = _prompt_from_plan(plan, prompt_id)
     started = time.perf_counter()
     rendered = runtime.render_prompt(prompt, question.text, metadata=question.metadata)
-    if type(rendered) is not MlxRenderedPrompt:
-        raise FrozenArtifactError("E5 runtime returned a non-MLX rendered prompt")
+    if type(rendered) is not VllmRenderedPrompt:
+        raise FrozenArtifactError("E5 runtime returned a non-VLLM rendered prompt")
     feature_peak = 0
     feature_schema_digest: str | None = None
     feature_shape: list[int] | None = None
@@ -1831,8 +1831,8 @@ def _execute_native_row(
             layers=schema.layers,
             sites=schema.sites,
         )
-        if type(cube) is not MlxPromptFeatureCubeOutput:
-            raise FrozenArtifactError("E5 runtime returned a non-MLX prompt feature cube")
+        if type(cube) is not VllmPromptFeatureCubeOutput:
+            raise FrozenArtifactError("E5 runtime returned a non-VLLM prompt feature cube")
         features = _compose_e8_controller_features(schema, cube.activations)
         decision = controller.decide(features)
         if decision.class_labels != ("C", "I", "A"):
@@ -1896,7 +1896,7 @@ def _execute_native_row(
     )
     elapsed = float(time.perf_counter() - started)
     if (
-        type(generated) is not MlxGenerationOutput
+        type(generated) is not VllmGenerationOutput
         or generated.rendered_prompt != rendered
         or generated.peak_memory_bytes > plan["max_peak_memory_bytes"]
         or feature_peak > plan["max_peak_memory_bytes"]

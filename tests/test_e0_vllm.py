@@ -7,13 +7,13 @@ from typing import Any
 
 import pytest
 
-import mfh.experiments.e0_mlx as e0_module
+import mfh.experiments.e0_vllm as e0_module
 from mfh.config import load_model_spec, load_prompt_specs
 from mfh.contracts import Question
 from mfh.errors import DataValidationError
-from mfh.experiments.e0_mlx import run_mlx_e0, verify_mlx_e0_bundle
+from mfh.experiments.e0_vllm import run_vllm_e0, verify_vllm_e0_bundle
 from mfh.experiments.runner import EvaluationCondition
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 
 ROOT = Path(__file__).parents[1]
 
@@ -26,7 +26,7 @@ class _FakeRuntime:
         index = int(question.rsplit(" ", 1)[-1])
         text = f"system={prompt.prompt_id};question={question}"
         token_ids = (1, index + 2)
-        return MlxRenderedPrompt(
+        return VllmRenderedPrompt(
             text=text,
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             token_ids=token_ids,
@@ -41,7 +41,7 @@ class _FakeRuntime:
         assert max_new_tokens == 48
         index = rendered.token_ids[-1] - 2
         text = f"answer-{index}"
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(100 + index, 0),
             text=text,
@@ -59,20 +59,32 @@ class _FakeRuntime:
 
     def runtime_identity(self):  # type: ignore[no-untyped-def]
         return {
-            "backend": "mlx",
-            "mlx": "test",
-            "mlx_lm": "test",
+            "backend": "vllm",
+            "vllm": "0.24.0",
+            "transformers": "test-transformers",
+            "torch": "test-torch",
             "python": "test-python",
-            "machine_model": "test-machine",
-            "chip": "test-chip",
-            "unified_memory_bytes": 1024,
-            "physical_cpu_cores": 1,
-            "architecture": "test-arch",
-            "os": "test-os",
-            "os_build": "test-build",
-            "model_class": "mlx_lm.models.qwen3_5.Model",
-            "tokenizer_class": "mlx_lm.tokenizer_utils.TokenizerWrapper",
+            "architecture": "x86_64",
+            "os": "test-linux",
+            "nvidia_driver": "test-driver",
+            "gpu_name": "NVIDIA A100-SXM4-40GB",
+            "gpu_total_memory_bytes": 40_000_000_000,
+            "cuda_capability": "8.0",
+            "cuda_runtime": "test-cuda",
+            "tensor_parallel_size": 1,
+            "quantization_loader": "modelopt_mixed",
+            "quantization_config_class": (
+                "vllm.model_executor.layers.quantization.modelopt."
+                "ModelOptMixedPrecisionConfig"
+            ),
+            "quantization_execution": "marlin-w4a16-fp8-weight-only-on-sm80",
+            "model_class": (
+                "vllm.model_executor.models.qwen3_5."
+                "Qwen3_5ForConditionalGeneration"
+            ),
+            "tokenizer_class": "test.Tokenizer",
             "num_layers": 64,
+            "hidden_size": 5_120,
             "seed": 17,
         }
 
@@ -83,12 +95,12 @@ class _FakeRuntime:
 class _DriftedRuntime(_FakeRuntime):
     def runtime_identity(self):  # type: ignore[no-untyped-def]
         identity = dict(super().runtime_identity())
-        identity["mlx_lm"] = "wrong-version"
+        identity["vllm"] = "wrong-version"
         return identity
 
 
 def _prepared() -> e0_module._Prepared:
-    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml")
+    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml")
     prompt = {
         value.prompt_id: value
         for value in load_prompt_specs(ROOT / "configs/prompts/primary.yaml")
@@ -160,7 +172,7 @@ def _arguments(tmp_path: Path) -> dict[str, Any]:
     }
 
 
-def test_mlx_e0_resumes_freezes_and_replays(
+def test_vllm_e0_resumes_freezes_and_replays(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     prepared = _prepared()
@@ -180,7 +192,7 @@ def test_mlx_e0_resumes_freezes_and_replays(
     checkpoint = tmp_path / "resume.json"
     args = _arguments(tmp_path)
 
-    partial = run_mlx_e0(
+    partial = run_vllm_e0(
         **args,
         work_directory=work,
         output_directory=output,
@@ -192,7 +204,7 @@ def test_mlx_e0_resumes_freezes_and_replays(
     assert partial["records_completed"] == 3
     external = json.loads(checkpoint.read_text())["resume_checkpoint"]
 
-    complete = run_mlx_e0(
+    complete = run_vllm_e0(
         **args,
         work_directory=work,
         output_directory=output,
@@ -205,7 +217,7 @@ def test_mlx_e0_resumes_freezes_and_replays(
     assert complete["records_completed"] == 1_000
     assert complete["summary"]["determinism_mismatches"] == 0
 
-    verified = verify_mlx_e0_bundle(
+    verified = verify_vllm_e0_bundle(
         output,
         expected_manifest_digest=complete["manifest_digest"],
         expected_plan_identity=complete["plan_identity"],
@@ -218,7 +230,7 @@ def test_mlx_e0_resumes_freezes_and_replays(
     records.chmod(0o644)
     records.write_text(records.read_text() + "{}\n")
     with pytest.raises(DataValidationError):
-        verify_mlx_e0_bundle(
+        verify_vllm_e0_bundle(
             output,
             expected_manifest_digest=complete["manifest_digest"],
             expected_plan_identity=complete["plan_identity"],
@@ -227,7 +239,7 @@ def test_mlx_e0_resumes_freezes_and_replays(
         )
 
 
-def test_mlx_e0_rejects_live_runtime_version_drift(
+def test_vllm_e0_rejects_live_runtime_version_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     prepared = _prepared()
@@ -243,8 +255,8 @@ def test_mlx_e0_rejects_live_runtime_version_drift(
         lambda *_args, **_kwargs: {},
     )
 
-    with pytest.raises(DataValidationError, match="live MLX runtime identity"):
-        run_mlx_e0(
+    with pytest.raises(DataValidationError, match="live VLLM runtime identity"):
+        run_vllm_e0(
             **_arguments(tmp_path),
             work_directory=tmp_path / "work",
             output_directory=tmp_path / "output",

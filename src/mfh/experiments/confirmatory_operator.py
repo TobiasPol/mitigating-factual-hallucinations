@@ -1,4 +1,4 @@
-"""Secret-free operator runbooks for native-MLX E9 and one-shot E10."""
+"""Secret-free operator runbooks for native-VLLM E9 and one-shot E10."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from mfh.experiments.e9_factorial import (
     finalize_e9,
     load_e9_execution_assets,
 )
-from mfh.experiments.e9_native import NativeE9MlxBackend
+from mfh.experiments.e9_native import NativeE9VllmBackend
 from mfh.experiments.e10_composite import (
     _derive_e10_composite_provenance,
     _e6_runtime_artifact,
@@ -44,7 +44,7 @@ from mfh.experiments.e10_composite import (
     validate_e10_freeze_inputs,
     validate_e10_prerequisite_bound_inputs,
 )
-from mfh.experiments.e10_native import NativeE10MlxBackend
+from mfh.experiments.e10_native import NativeE10VllmBackend
 from mfh.experiments.model_selection import validate_active_model_spec
 from mfh.experiments.protocol import ExperimentPhase, StudyProtocol, load_study_protocol
 from mfh.experiments.robustness_diagnostics import (
@@ -60,11 +60,11 @@ from mfh.experiments.runner import (
     open_phase_prerequisite,
 )
 from mfh.experiments.snapshots import validate_execution_snapshot
-from mfh.inference.mlx_research import MlxResearchRuntime
 from mfh.inference.transformers_snapshot import (
     reject_symlink_path_components,
     verify_transformers_snapshot,
 )
+from mfh.inference.vllm_research import VllmResearchRuntime
 from mfh.provenance import sha256_file, sha256_path, stable_hash
 
 _RUNBOOK_KEYS = {
@@ -640,7 +640,7 @@ def _native_runtime(
     provenance = identity.get("research_provenance")
     if isinstance(seed, bool) or not isinstance(seed, int) or not isinstance(provenance, Mapping):
         raise FrozenArtifactError("confirmatory runtime identity is incomplete")
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         model,
         snapshot_path=runbook.snapshot_directory,
         seed=seed,
@@ -663,7 +663,7 @@ def execute_confirmatory_runbook(
     checkpoint_size: int = 1,
     limit: int | None = None,
 ) -> Mapping[str, Any]:
-    """Load the pinned Qwen MLX runtime and resume pending E9/E10 rows."""
+    """Load the pinned Qwen VLLM runtime and resume pending E9/E10 rows."""
 
     study, _model, contract = _preflight_contract(runbook)
     _open_runbook_bound_ledger(
@@ -683,7 +683,7 @@ def execute_confirmatory_runbook(
         assets9 = load_e9_execution_assets(runbook.run_directory, study=study)
         if assets9.ledger.contract.digest != contract.digest:
             raise FrozenArtifactError("E9 execution assets differ from the runbook contract")
-        backend = NativeE9MlxBackend(
+        backend = NativeE9VllmBackend(
             attestor=attestor,
             runtime_artifact=runtime_artifact,
             grader_bundle=packaged_grader,
@@ -700,7 +700,7 @@ def execute_confirmatory_runbook(
         assets10 = load_e10_execution_assets(runbook.run_directory, study=study)
         if assets10.ledger.contract.digest != contract.digest:
             raise FrozenArtifactError("E10 execution assets differ from the runbook contract")
-        backend10 = NativeE10MlxBackend(
+        backend10 = NativeE10VllmBackend(
             attestor=attestor,
             runtime_artifact=runtime_artifact,
             grader_bundle=packaged_grader,
@@ -849,10 +849,10 @@ def write_confirmatory_runbook_template(
         "schema_version": 1,
         "phase": phase.value,
         "study_protocol": "../../../../configs/experiments/phases.yaml",
-        "model_config": "../../../../configs/models/qwen3.6-27b-mlx-4bit.yaml",
+        "model_config": "../../../../configs/models/qwen3.6-27b-nvfp4.yaml",
         "prompt_config": "../../../../configs/prompts/primary.yaml",
-        "snapshot_directory": "../../../models/qwen3.6-27b-mlx-4bit/SNAPSHOT",
-        "snapshot_manifest": "../../../../configs/models/qwen3.6-27b-mlx-4bit.snapshot.json",
+        "snapshot_directory": "../../../models/qwen3.6-27b-nvfp4/SNAPSHOT",
+        "snapshot_manifest": "../../../../configs/models/qwen3.6-27b-nvfp4.snapshot.json",
         "run_directory": f"../runs/{phase.value}",
         "evidence_directory": f"../evidence/{phase.value}",
         "input_artifacts": {name: f"REPLACE/{name}" for name in required_inputs},

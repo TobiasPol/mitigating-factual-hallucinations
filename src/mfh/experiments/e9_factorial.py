@@ -16,7 +16,7 @@ from mfh.config import load_model_spec, load_prompt_specs
 from mfh.contracts import GenerationRecord, InterventionSpec, ModelSpec, PromptSpec, Question
 from mfh.data.io import read_questions
 from mfh.errors import DataValidationError, FrozenArtifactError
-from mfh.experiments.e9_native import NativeE9MlxBackend
+from mfh.experiments.e9_native import NativeE9VllmBackend
 from mfh.experiments.evidence import GateResult
 from mfh.experiments.gates import write_gate_evidence
 from mfh.experiments.model_selection import validate_active_model_spec
@@ -238,7 +238,7 @@ def load_e9_execution_assets(
 
 def execute_e9_pending(
     assets: E9ExecutionAssets,
-    backend: NativeE9MlxBackend,
+    backend: NativeE9VllmBackend,
     *,
     checkpoint_size: int = 1,
     limit: int | None = None,
@@ -246,7 +246,7 @@ def execute_e9_pending(
     """Execute pending rows in deterministic resume order and checkpoint atomically."""
 
     if (
-        type(backend) is not NativeE9MlxBackend
+        type(backend) is not NativeE9VllmBackend
         or checkpoint_size <= 0
         or (limit is not None and limit <= 0)
     ):

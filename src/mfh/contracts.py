@@ -46,7 +46,7 @@ class Outcome(StrEnum):
 
 
 class Runtime(StrEnum):
-    MLX = "mlx"
+    VLLM = "vllm"
     SYNTHETIC = "synthetic"
 
 

@@ -31,7 +31,7 @@ from mfh.experiments.e5_layer_labels import (
     verify_e5_layer_label_capture,
 )
 from mfh.experiments.e5_types import E5FitRecipe
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.methods.features import (
     ActivationFeatureSchema,
     ActivationKind,
@@ -58,7 +58,7 @@ _PROMPT = PromptSpec(
 
 def _identity() -> dict[str, Any]:
     return {
-        "model_repository": "mlx-community/test",
+        "model_repository": "vllm-community/test",
         "model_revision": "c" * 40,
         "model_quantization": "4bit",
         "num_layers": 3,
@@ -89,9 +89,9 @@ def _datasets() -> Mapping[FeatureComposition, ProbeDataset]:
             benchmark="triviaqa",
             partition="T-controller-train",
             split_manifest_digest="1" * 64,
-            model_repository="mlx-community/test",
+            model_repository="vllm-community/test",
             model_revision="c" * 40,
-            runtime=Runtime.MLX,
+            runtime=Runtime.VLLM,
             quantization="4bit",
             prompt_id="P0-neutral",
             prompt_sha256=hashlib.sha256(_PROMPT.text.encode()).hexdigest(),
@@ -196,11 +196,11 @@ class _Runtime:
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         del metadata
         text = f"{prompt.text}|{question}"
         tokens = (10, int(question.split()[1].rstrip("?")) + 20)
-        return MlxRenderedPrompt(
+        return VllmRenderedPrompt(
             text=text,
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             token_ids=tokens,
@@ -224,11 +224,11 @@ class _Runtime:
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[tuple[int, ActivationSite], Any],
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         del max_new_tokens
         (layer, _site), raw_state = next(iter(intervention_states.items()))
         assert isinstance(raw_state, _State)
@@ -248,7 +248,7 @@ class _Runtime:
         }
         output = outputs[(question_index, layer)]
         token_ids = (100 + question_index, 200 + layer)
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=token_ids,
             text=output,

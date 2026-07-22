@@ -37,11 +37,11 @@ from mfh.experiments.runner import (
     adaptive_execution_receipt_body,
 )
 from mfh.inference.architecture import HookKey
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxResearchInterventionState,
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmResearchInterventionState,
 )
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.methods.adaptive import AdaptiveBatchDecision
 from mfh.methods.features import (
     ActivationFeatureSchema,
@@ -60,7 +60,7 @@ def _token_digest(values: tuple[int, ...]) -> str:
 
 
 class _AdaptiveRuntime:
-    def __init__(self, rendered: MlxRenderedPrompt) -> None:
+    def __init__(self, rendered: VllmRenderedPrompt) -> None:
         self.rendered = rendered
 
     def render_prompt(
@@ -69,19 +69,19 @@ class _AdaptiveRuntime:
         _question: str,
         *,
         metadata: object | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         return self.rendered
 
     def prompt_feature_cube(
         self,
-        _rendered: MlxRenderedPrompt,
+        _rendered: VllmRenderedPrompt,
         *,
         layers: tuple[int, ...],
         sites: tuple[ActivationSite, ...],
-    ) -> MlxPromptFeatureCubeOutput:
+    ) -> VllmPromptFeatureCubeOutput:
         assert layers == (1,)
         assert sites == (ActivationSite.POST_MLP,)
-        return MlxPromptFeatureCubeOutput(
+        return VllmPromptFeatureCubeOutput(
             activations={
                 ActivationSite.POST_MLP: {
                     1: np.array([[0.25, -0.5]], dtype=np.float32)
@@ -99,8 +99,8 @@ class _AdaptiveRuntime:
         standardized_alpha: float,
         reference_rms: float,
         token_scope: TokenScope,
-    ) -> MlxResearchInterventionState:
-        return MlxResearchInterventionState(
+    ) -> VllmResearchInterventionState:
+        return VllmResearchInterventionState(
             direction=direction,
             alpha=standardized_alpha * reference_rms,
             token_scope=token_scope,
@@ -108,20 +108,20 @@ class _AdaptiveRuntime:
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: dict[
-            tuple[int, ActivationSite], MlxResearchInterventionState
+            tuple[int, ActivationSite], VllmResearchInterventionState
         ],
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 8
         if intervention_states:
             state = next(iter(intervention_states.values()))
             state.captured = np.zeros((1, 1, 2), dtype=np.float32)
             state.intervened = np.array([[[state.alpha, 0.0]]], dtype=np.float32)
             state.applications = 1
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(9,),
             text="gold",
@@ -162,7 +162,7 @@ def test_native_e6_e8_m3_captures_routes_intervenes_and_signs(
     )
     prompt_sha = hashlib.sha256(prompt.text.encode()).hexdigest()
     controller_prompt_sha = hashlib.sha256(controller_prompt.text.encode()).hexdigest()
-    rendered = MlxRenderedPrompt(
+    rendered = VllmRenderedPrompt(
         text="rendered",
         sha256="a" * 64,
         token_ids=(1, 2),
@@ -181,7 +181,7 @@ def test_native_e6_e8_m3_captures_routes_intervenes_and_signs(
         split_manifest_digest="1" * 64,
         model_repository="model/repository",
         model_revision="0" * 40,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization="1bit",
         prompt_id=controller_prompt.prompt_id,
         prompt_sha256=controller_prompt_sha,
@@ -235,7 +235,7 @@ def test_native_e6_e8_m3_captures_routes_intervenes_and_signs(
     attestor._private_key = private_key
     attestor.execution_public_key = public_key
     attestor._artifact = {  # type: ignore[assignment]
-        "runtime_identity": {"unified_memory_bytes": 16 * 1024**3}
+        "runtime_identity": {"gpu_total_memory_bytes": 16 * 1024**3}
     }
     policy = AdaptivePolicySpec(
         schema_version=2,
@@ -265,7 +265,7 @@ def test_native_e6_e8_m3_captures_routes_intervenes_and_signs(
         model_name="model",
         model_repository="model/repository",
         model_revision="0" * 40,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization="1bit",
         model_num_layers=2,
         system_prompt_id=prompt.prompt_id,
@@ -287,7 +287,7 @@ def test_native_e6_e8_m3_captures_routes_intervenes_and_signs(
         benchmark=question.benchmark,
         model_repository=condition.model_repository,
         model_revision=condition.model_revision,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=condition.quantization,
         system_prompt_id=prompt.prompt_id,
         rendered_prompt_hash=rendered.sha256,
@@ -355,7 +355,7 @@ def test_native_e6_e8_m3_captures_routes_intervenes_and_signs(
     if phase is ExperimentPhase.E6:
         _validate_e6_generation_runtime_evidence(
             executed,
-            runtime_identity={"unified_memory_bytes": 16 * 1024**3},
+            runtime_identity={"gpu_total_memory_bytes": 16 * 1024**3},
         )
     _validate_e8_adaptive_controller_record(
         executed,
@@ -364,7 +364,7 @@ def test_native_e6_e8_m3_captures_routes_intervenes_and_signs(
         controller_artifact_sha256=controller_sha,
         controller_prompt_id=controller_prompt.prompt_id,
         controller_prompt_sha256=controller_prompt_sha,
-        runtime_identity={"unified_memory_bytes": 16 * 1024**3},
+        runtime_identity={"gpu_total_memory_bytes": 16 * 1024**3},
     )
     metrics = dict(executed.metadata["generation_runtime_metrics"])
     metrics["auxiliary_peak_memory_bytes"] = 124
@@ -392,5 +392,5 @@ def test_native_e6_e8_m3_captures_routes_intervenes_and_signs(
             controller_artifact_sha256=controller_sha,
             controller_prompt_id=controller_prompt.prompt_id,
             controller_prompt_sha256=controller_prompt_sha,
-            runtime_identity={"unified_memory_bytes": 16 * 1024**3},
+            runtime_identity={"gpu_total_memory_bytes": 16 * 1024**3},
         )

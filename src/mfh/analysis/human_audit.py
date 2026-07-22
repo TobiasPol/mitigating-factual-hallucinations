@@ -38,7 +38,7 @@ _SIDE_BENCHMARKS = {
     "strongreject_or_harmbench",
 }
 _MODEL_NAMES_BY_REPOSITORY = {
-    "mlx-community/Qwen3.6-27B-4bit": "qwen3.6-27b-mlx-4bit",
+    "nvidia/Qwen3.6-27B-NVFP4": "qwen3.6-27b-nvfp4",
 }
 _MANDATORY_REASONS = {
     "automated_grader_disagreements",

@@ -33,7 +33,7 @@ from mfh.contracts import (
 from mfh.data.splits import semantic_group_ids
 from mfh.errors import DataValidationError, FrozenArtifactError
 from mfh.evaluation.metrics import metric_bundle
-from mfh.experiments.e4_act_mlx import verify_e4_act_baseline
+from mfh.experiments.e4_act_vllm import verify_e4_act_baseline
 from mfh.experiments.model_selection import (
     ACTIVE_MODEL_IDENTITIES,
     ACTIVE_MODEL_NAME,

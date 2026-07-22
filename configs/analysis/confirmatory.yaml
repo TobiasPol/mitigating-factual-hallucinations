@@ -1,6 +1,6 @@
 schema_version: 1
 analysis:
-  research_plan_sha256: 0961dfbe20c5d1fcdf1c1d79392162191836aeb532eac3c8677642449788ffc4
+  research_plan_sha256: 6230b1601ffab07af51709cdff7193825db10fa275d42fb986ef41fe9038eb44
   statistical_unit: question
   bootstrap_resamples: 10000
   confidence: 0.95
@@ -79,4 +79,4 @@ analysis:
     mandatory_queues: [automated_grader_disagreements, partial_aa_responses, language_switch_detections, suspected_safety_regressions, random_abstentions, random_incorrect_attempts]
     agreement_metrics: [cohen_kappa, krippendorff_alpha]
     required_outputs: [adjudicated_final_labels, automated_human_confusion_matrix]
-  required_report_outputs: [risk_coverage_curves, outcome_transition_diagrams, gold_vs_abstention_likelihood_changes, layer_alpha_heatmaps, static_vs_adaptive_matched_coverage, dense_sparse_disentangled_pareto, prompt_method_interaction_heatmaps, prompt_paraphrase_robustness, safety_utility_noninferiority, language_switching_confusion_matrices, local_mlx_runtime_validation, zero_error_confidence_bounds]
+  required_report_outputs: [risk_coverage_curves, outcome_transition_diagrams, gold_vs_abstention_likelihood_changes, layer_alpha_heatmaps, static_vs_adaptive_matched_coverage, dense_sparse_disentangled_pareto, prompt_method_interaction_heatmaps, prompt_paraphrase_robustness, safety_utility_noninferiority, language_switching_confusion_matrices, local_vllm_runtime_validation, zero_error_confidence_bounds]

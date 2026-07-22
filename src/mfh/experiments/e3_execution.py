@@ -1,4 +1,4 @@
-"""Verified E3 intervention resolution and one-row native MLX execution."""
+"""Verified E3 intervention resolution and one-row native VLLM execution."""
 
 from __future__ import annotations
 
@@ -36,10 +36,10 @@ from mfh.experiments.e3_schedule import (
     select_e3_screen_questions,
 )
 from mfh.experiments.e3_selection import VerifiedE3StageSelection
-from mfh.inference.mlx_runtime import (
-    MlxGenerationOutput,
-    MlxInterventionState,
-    MlxRenderedPrompt,
+from mfh.inference.vllm_runtime import (
+    VllmGenerationOutput,
+    VllmInterventionState,
+    VllmRenderedPrompt,
 )
 from mfh.provenance import stable_hash
 
@@ -113,7 +113,7 @@ def _directory_stat_snapshot(path: Path) -> Mapping[str, tuple[int, ...]]:
     return MappingProxyType(values)
 
 
-def _immutable_array(value: Any, *, dtype: Any) -> np.ndarray:
+def _immutable_array(value: Any, *, dtype: Any) -> np.ndarray[Any, Any]:
     source = np.asarray(value, dtype=dtype)
     payload = source.tobytes(order="C")
     result = np.frombuffer(payload, dtype=source.dtype).reshape(source.shape)
@@ -121,7 +121,7 @@ def _immutable_array(value: Any, *, dtype: Any) -> np.ndarray:
     return result
 
 
-def _array_digest(value: np.ndarray) -> str:
+def _array_digest(value: np.ndarray[Any, Any]) -> str:
     return stable_hash(
         {
             "dtype": value.dtype.str,
@@ -131,7 +131,7 @@ def _array_digest(value: np.ndarray) -> str:
     )
 
 
-def _immutable_root(value: np.ndarray) -> object:
+def _immutable_root(value: np.ndarray[Any, Any]) -> object:
     root: object = value
     while isinstance(root, np.ndarray) and root.base is not None:
         root = root.base
@@ -165,7 +165,7 @@ def _prompt_fingerprint(value: PromptSpec) -> str:
 
 def _load_npz_snapshot(
     path: Path, *, expected_sha256: str, names: frozenset[str]
-) -> Mapping[str, np.ndarray]:
+) -> Mapping[str, np.ndarray[Any, Any]]:
     try:
         payload = path.read_bytes()
         if _sha256_bytes(payload) != expected_sha256:
@@ -179,7 +179,7 @@ def _load_npz_snapshot(
     return MappingProxyType(arrays)
 
 
-def _open_npy_snapshot(path: Path, *, expected_sha256: str) -> np.ndarray:
+def _open_npy_snapshot(path: Path, *, expected_sha256: str) -> np.ndarray[Any, Any]:
     try:
         with path.open("rb") as handle:
             digest = hashlib.sha256()
@@ -190,13 +190,13 @@ def _open_npy_snapshot(path: Path, *, expected_sha256: str) -> np.ndarray:
                     "E3 fixed-control tensor changed after verification"
                 )
             handle.seek(0)
-            version = np.lib.format.read_magic(handle)
+            version = np.lib.format.read_magic(handle)  # type: ignore[no-untyped-call]
             if version == (1, 0):
-                shape, fortran_order, dtype = np.lib.format.read_array_header_1_0(
+                shape, fortran_order, dtype = np.lib.format.read_array_header_1_0(  # type: ignore[no-untyped-call]
                     handle
                 )
             elif version in {(2, 0), (3, 0)}:
-                shape, fortran_order, dtype = np.lib.format.read_array_header_2_0(
+                shape, fortran_order, dtype = np.lib.format.read_array_header_2_0(  # type: ignore[no-untyped-call]
                     handle
                 )
             else:
@@ -259,36 +259,36 @@ class E3ExecutionRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def generate(
-        self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-    ) -> MlxGenerationOutput: ...
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput: ...
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[
-            tuple[int, ActivationSite], MlxInterventionState
+            tuple[int, ActivationSite], VllmInterventionState
         ],
-    ) -> MlxGenerationOutput: ...
+    ) -> VllmGenerationOutput: ...
 
     def standardized_intervention_state(
         self,
-        direction: np.ndarray,
+        direction: np.ndarray[Any, Any],
         *,
         standardized_alpha: float,
         reference_rms: float,
         token_scope: TokenScope,
         decay: float = 0.0,
-    ) -> MlxInterventionState: ...
+    ) -> VllmInterventionState: ...
 
 
 @dataclass(frozen=True, slots=True)
 class E3ResolvedIntervention:
-    direction: np.ndarray
+    direction: np.ndarray[Any, Any]
     direction_sha256: str
     extraction_method: str
     training_prompt_id: str
@@ -607,14 +607,14 @@ class E3ExecutionResult:
 
 @dataclass(frozen=True, slots=True)
 class E3ExecutionAssets:
-    directions: np.ndarray
-    reference_rms: np.ndarray
-    shuffled_directions: np.ndarray | None
+    directions: np.ndarray[Any, Any]
+    reference_rms: np.ndarray[Any, Any]
+    shuffled_directions: np.ndarray[Any, Any] | None
     construction_directory: Path
     vector_bundle_directory: Path
     fixed_control_directory: Path | None
-    fixed_random_directions: np.ndarray | None
-    fixed_gaussian_directions: np.ndarray | None
+    fixed_random_directions: np.ndarray[Any, Any] | None
+    fixed_gaussian_directions: np.ndarray[Any, Any] | None
     dev_question_ids: tuple[str, ...]
     fixed_control_metadata_digest: str | None
     dev_question_ids_digest: str | None
@@ -646,7 +646,7 @@ class E3ExecutionAssets:
             or np.any(rms <= 0)
         ):
             raise DataValidationError("E3 execution vector assets are invalid")
-        shuffled: np.ndarray | None = None
+        shuffled: np.ndarray[Any, Any] | None = None
         if self.shuffled_directions is not None:
             shuffled = _immutable_array(self.shuffled_directions, dtype=np.float32)
             if (
@@ -744,7 +744,7 @@ class E3ExecutionAssets:
         )
         object.__setattr__(self, "artifact_snapshots", MappingProxyType(snapshots))
 
-    def _tensor_values(self) -> Mapping[str, np.ndarray]:
+    def _tensor_values(self) -> Mapping[str, np.ndarray[Any, Any]]:
         values = {
             "directions": self.directions,
             "reference_rms": self.reference_rms,
@@ -994,7 +994,7 @@ def load_e3_execution_assets(
     )
     directions = vector_arrays["directions"]
     rms = vector_arrays["reference_rms"]
-    shuffled: np.ndarray | None = None
+    shuffled: np.ndarray[Any, Any] | None = None
     shuffled_verification: Mapping[str, Any] | None = None
     if shuffled_bundle_directory is not None or shuffled_work_directory is not None:
         if (
@@ -1023,8 +1023,8 @@ def load_e3_execution_assets(
     dev_by_id = {value.question_id: value for value in dev_questions}
     fixed_metadata_digest: str | None = None
     dev_digest: str | None = None
-    fixed_random: np.ndarray | None = None
-    fixed_gaussian: np.ndarray | None = None
+    fixed_random: np.ndarray[Any, Any] | None = None
+    fixed_gaussian: np.ndarray[Any, Any] | None = None
     fixed_verification: Mapping[str, Any] | None = None
     if fixed_control_directory is not None:
         if scope_selection is None:
@@ -1214,7 +1214,7 @@ def load_e3_execution_assets(
 
 
 def _actual_delta(
-    state: MlxInterventionState, resolved: E3ResolvedIntervention
+    state: VllmInterventionState, resolved: E3ResolvedIntervention
 ) -> float:
     if state.applications == 0:
         return 0.0
@@ -1276,7 +1276,7 @@ def execute_e3_condition(
     if expected_rendered != (rendered.sha256, rendered.token_ids_sha256):
         raise FrozenArtifactError("E3 rendered prompt differs from frozen receipt")
     resolved = assets.resolve(condition, question_id=question.question_id)
-    state: MlxInterventionState | None = None
+    state: VllmInterventionState | None = None
     if resolved is None:
         generated = runtime.generate(rendered, max_new_tokens=max_new_tokens)
     else:

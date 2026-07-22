@@ -202,7 +202,7 @@ class StudyProtocol:
         phases = {item.phase: item for item in self.phases}
         e0 = phases[ExperimentPhase.E0]
         if set(e0.models) != E0_MODELS:
-            raise ConfigurationError("E0 must validate the sole approved Qwen MLX model")
+            raise ConfigurationError("E0 must validate the sole approved Qwen VLLM model")
         if e0.question_limit != 500:
             raise ConfigurationError("E0 must use 500 shared benign factual prompts")
 
@@ -291,7 +291,7 @@ class StudyProtocol:
         for phase in self.phases:
             if set(phase.models) != _PRIMARY_MODELS:
                 raise ConfigurationError(
-                    f"{phase.phase.value} must use the sole approved Qwen MLX model"
+                    f"{phase.phase.value} must use the sole approved Qwen VLLM model"
                 )
             if phase.phase.ordinal >= ExperimentPhase.E2.ordinal and phase.phase.ordinal <= 8:
                 target_partitions = {"simpleqa-train", "aa-train", "simpleqa-dev", "aa-dev"}

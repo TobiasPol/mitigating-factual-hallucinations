@@ -23,7 +23,7 @@ from mfh.experiments.aa_official_track import (
 )
 from mfh.experiments.protocol import ExperimentPhase
 from mfh.experiments.runner import EvaluationCondition
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.provenance import stable_hash
 
 ROOT = Path(__file__).parents[1]
@@ -36,11 +36,11 @@ class _Runtime:
         question: str,
         *,
         metadata: dict[str, Any] | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         system = prompt.text.format_map(metadata or {})
         text = f"system:{system}\nuser:{question}\nassistant:"
         token_ids = (1, 2, 3)
-        return MlxRenderedPrompt(
+        return VllmRenderedPrompt(
             text=text,
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             token_ids=token_ids,
@@ -51,9 +51,11 @@ class _Runtime:
             ),
         )
 
-    def generate(self, rendered: MlxRenderedPrompt, *, max_new_tokens: int) -> MlxGenerationOutput:
+    def generate(
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 48
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(4,),
             text="answer",
@@ -139,7 +141,7 @@ def _fixture_context() -> tuple[AAOfficialContext, tuple[Any, ...], _Runtime]:
         model_name="model",
         model_repository="repository/model",
         model_revision="a" * 40,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization="4bit",
         model_num_layers=2,
         system_prompt_id=prompt.prompt_id,
@@ -171,7 +173,7 @@ def _fixture_context() -> tuple[AAOfficialContext, tuple[Any, ...], _Runtime]:
             "name": "model",
             "repository": "repository/model",
             "revision": "a" * 40,
-            "runtime": "mlx",
+            "runtime": "vllm",
             "quantization": "4bit",
             "num_layers": 2,
         },

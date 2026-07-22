@@ -28,11 +28,11 @@ from mfh.experiments.e5_capture import (
     verify_e5_fit_capture,
 )
 from mfh.experiments.e5_fit import E5FitRecipe
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxTeacherForcedCubeOutput,
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmTeacherForcedCubeOutput,
 )
-from mfh.inference.mlx_runtime import MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmRenderedPrompt
 from mfh.methods.features import FeatureComposition
 from mfh.provenance import stable_hash
 
@@ -50,7 +50,7 @@ _PUBLIC = (
 
 def _runtime_identity() -> dict[str, Any]:
     return {
-        "model_repository": "mlx-community/test",
+        "model_repository": "vllm-community/test",
         "model_revision": "c" * 40,
         "model_quantization": "4bit",
         "altered": False,
@@ -81,11 +81,11 @@ def _prompts() -> dict[str, PromptSpec]:
     }
 
 
-def _render(prompt: PromptSpec, question: Question) -> MlxRenderedPrompt:
+def _render(prompt: PromptSpec, question: Question) -> VllmRenderedPrompt:
     text = f"{prompt.prompt_id}|{question.text}"
     index = int(question.question_id.split("-")[1])
     tokens = (10 + index, 20 + len(prompt.prompt_id))
-    return MlxRenderedPrompt(
+    return VllmRenderedPrompt(
         text=text,
         sha256=hashlib.sha256(text.encode()).hexdigest(),
         token_ids=tokens,
@@ -170,7 +170,7 @@ class _Runtime:
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         del metadata
         index = int(question.split()[1].rstrip("?"))
         return _render(
@@ -180,13 +180,13 @@ class _Runtime:
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxPromptFeatureCubeOutput:
+    ) -> VllmPromptFeatureCubeOutput:
         index = int(rendered.text.split("Question ")[1].rstrip("?"))
-        return MlxPromptFeatureCubeOutput(
+        return VllmPromptFeatureCubeOutput(
             activations={
                 site: {layer: np.full((1, 4), index + layer, dtype=np.float32) for layer in layers}
                 for site in sites
@@ -198,14 +198,14 @@ class _Runtime:
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxTeacherForcedCubeOutput:
+    ) -> VllmTeacherForcedCubeOutput:
         token_ids = (301, 302)
-        return MlxTeacherForcedCubeOutput(
+        return VllmTeacherForcedCubeOutput(
             response_text_sha256=hashlib.sha256(response.encode()).hexdigest(),
             response_token_ids=token_ids,
             response_token_ids_sha256=_token_digest(token_ids),

@@ -24,14 +24,14 @@ from mfh.experiments.e0_completion import (
     verify_e0_completion_receipt,
     write_e0_completion_receipt,
 )
-from mfh.experiments.e0_mlx import run_mlx_e0, verify_mlx_e0_bundle
 from mfh.experiments.e0_phase import finalize_e0_phase_run
-from mfh.experiments.e1_mlx import (
-    finalize_e1_mlx,
+from mfh.experiments.e0_vllm import run_vllm_e0, verify_vllm_e0_bundle
+from mfh.experiments.e1_vllm import (
+    finalize_e1_vllm,
     grade_e1_openrouter,
     load_env_secret,
-    prepare_e1_mlx,
-    run_e1_mlx_generations,
+    prepare_e1_vllm,
+    run_e1_vllm_generations,
     verify_e1_output_bundle,
 )
 from mfh.experiments.e2_capture import (
@@ -47,14 +47,6 @@ from mfh.experiments.e2_controller_inputs import (
     E2ControllerInputView,
     build_e2_controller_input_datasets,
     controller_input_views,
-)
-from mfh.experiments.e2_mlx import (
-    E2Prepared,
-    finalize_e2_mlx_phase,
-    fit_e2_mlx_probes,
-    prepare_e2_mlx,
-    run_e2_mlx_capture,
-    verify_e2_mlx_capture,
 )
 from mfh.experiments.e2_phase import finalize_e2_phase_run
 from mfh.experiments.e2_probes import (
@@ -74,6 +66,14 @@ from mfh.experiments.e2_schedule import (
     controller_feature_partitions,
     verify_e2_workspace,
     write_e2_workspace,
+)
+from mfh.experiments.e2_vllm import (
+    E2Prepared,
+    finalize_e2_vllm_phase,
+    fit_e2_vllm_probes,
+    prepare_e2_vllm,
+    run_e2_vllm_capture,
+    verify_e2_vllm_capture,
 )
 from mfh.experiments.e3_construction import (
     E3ConstructionRuntime,
@@ -146,7 +146,7 @@ from mfh.experiments.e3_selection import (
     verify_e3_stage_selection,
     write_e3_stage_selection,
 )
-from mfh.experiments.e4_act_mlx import (
+from mfh.experiments.e4_act_vllm import (
     E4ActBaseline,
     build_e4_act_baseline,
     verify_e4_act_baseline,
@@ -180,7 +180,7 @@ from mfh.experiments.e4_baselines import (
     write_e4_promotion,
     write_e4_screen_receipt,
 )
-from mfh.experiments.e4_caa_mlx import (
+from mfh.experiments.e4_caa_vllm import (
     M2CAAArtifact,
     M2CAAProtocol,
     finalize_m2_caa_artifact,
@@ -189,14 +189,14 @@ from mfh.experiments.e4_caa_mlx import (
     verify_m2_caa_artifact,
     verify_m2_caa_work,
 )
-from mfh.experiments.e4_mlx import (
-    E4MlxSetup,
+from mfh.experiments.e4_vllm import (
+    E4VllmSetup,
     e4_execution_public_key,
-    finalize_e4_mlx_screen,
-    load_e4_mlx_setup,
-    prepare_e4_mlx_screen,
-    run_e4_mlx_screen,
-    verify_e4_mlx_screen,
+    finalize_e4_vllm_screen,
+    load_e4_vllm_setup,
+    prepare_e4_vllm_screen,
+    run_e4_vllm_screen,
+    verify_e4_vllm_screen,
 )
 from mfh.experiments.e5_adaptive import (
     E5AblationRecord,
@@ -429,10 +429,10 @@ __all__ = [
     "E4Feasibility",
     "E4MethodCapability",
     "E4MethodPolicy",
-    "E4MlxSetup",
     "E4Promotion",
     "E4Protocol",
     "E4ScreenReceipt",
+    "E4VllmSetup",
     "E5AblationRecord",
     "E5AblationSpec",
     "E5ControllerBinding",
@@ -544,13 +544,13 @@ __all__ = [
     "expand_factorial_conditions",
     "finalize_aa_official_track",
     "finalize_e0_phase_run",
-    "finalize_e1_mlx",
-    "finalize_e2_mlx_phase",
+    "finalize_e1_vllm",
     "finalize_e2_phase_run",
+    "finalize_e2_vllm_phase",
     "finalize_e3_phase",
     "finalize_e3_shuffled_control_bundle",
     "finalize_e3_vector_bundle",
-    "finalize_e4_mlx_screen",
+    "finalize_e4_vllm_screen",
     "finalize_e5_native_ablation",
     "finalize_e5_phase",
     "finalize_e6_phase",
@@ -558,8 +558,8 @@ __all__ = [
     "finalize_m2_caa_artifact",
     "finalize_promoted_e5_phase",
     "finalize_robustness_result_store",
-    "fit_e2_mlx_probes",
     "fit_e2_probe_bundle",
+    "fit_e2_vllm_probes",
     "fit_e5_controller_grid",
     "fit_e10_early_probe_selection",
     "fit_rq1_m3_controller",
@@ -578,9 +578,9 @@ __all__ = [
     "load_e3_fixed_control_direction",
     "load_e4_capability_report",
     "load_e4_method_policy",
-    "load_e4_mlx_setup",
     "load_e4_promotion_artifact",
     "load_e4_screen_receipt",
+    "load_e4_vllm_setup",
     "load_e5_controller_binding",
     "load_e5_fit_capture_data",
     "load_e5_layer_label_data",
@@ -601,13 +601,13 @@ __all__ = [
     "open_robustness_result_store",
     "package_e5_controller_bindings",
     "prepare_aa_official_track",
-    "prepare_e1_mlx",
+    "prepare_e1_vllm",
     "prepare_e2_capture_work",
-    "prepare_e2_mlx",
+    "prepare_e2_vllm",
     "prepare_e3_construction_work",
     "prepare_e3_evaluation_work",
     "prepare_e3_shuffled_control_work",
-    "prepare_e4_mlx_screen",
+    "prepare_e4_vllm_screen",
     "prepare_e5_fit_capture",
     "prepare_e5_layer_label_capture",
     "prepare_e5_native_ablation",
@@ -622,20 +622,20 @@ __all__ = [
     "rq1_m3_fit_capture_attestation_body",
     "rq1_task_question_sets",
     "run_aa_official_track",
-    "run_e1_mlx_generations",
+    "run_e1_vllm_generations",
     "run_e2_capture",
-    "run_e2_mlx_capture",
+    "run_e2_vllm_capture",
     "run_e3_construction",
     "run_e3_evaluation",
     "run_e3_shuffled_control",
-    "run_e4_mlx_screen",
+    "run_e4_vllm_screen",
     "run_e5_fit_capture",
     "run_e5_layer_label_capture",
     "run_e5_native_ablation",
     "run_e10_early_probe_capture",
     "run_m2_caa_work",
-    "run_mlx_e0",
     "run_synthetic_study",
+    "run_vllm_e0",
     "save_e5_fitted_controller",
     "save_e5_fitted_grid",
     "score_e6_question",
@@ -653,8 +653,8 @@ __all__ = [
     "verify_e1_grader_bundle",
     "verify_e1_output_bundle",
     "verify_e2_capture_work",
-    "verify_e2_mlx_capture",
     "verify_e2_probe_bundle",
+    "verify_e2_vllm_capture",
     "verify_e2_workspace",
     "verify_e3_construction_work",
     "verify_e3_evaluation_work",
@@ -666,9 +666,9 @@ __all__ = [
     "verify_e3_vector_bundle",
     "verify_e4_act_baseline",
     "verify_e4_capability_report",
-    "verify_e4_mlx_screen",
     "verify_e4_promotion",
     "verify_e4_screen_receipt",
+    "verify_e4_vllm_screen",
     "verify_e5_controller_bindings",
     "verify_e5_controller_splits",
     "verify_e5_fit_capture",
@@ -684,12 +684,12 @@ __all__ = [
     "verify_e10_early_probe_capture",
     "verify_m2_caa_artifact",
     "verify_m2_caa_work",
-    "verify_mlx_e0_bundle",
     "verify_promoted_e5_phase",
     "verify_robustness_diagnostic_plan",
     "verify_robustness_result_store",
     "verify_signed_e5_selection",
     "verify_synthetic_study",
+    "verify_vllm_e0_bundle",
     "write_e0_completion_receipt",
     "write_e1_grader_bundle",
     "write_e2_workspace",

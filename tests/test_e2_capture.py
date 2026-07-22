@@ -29,8 +29,8 @@ from mfh.experiments.e2_schedule import (
     build_e2_schedule,
     write_e2_workspace,
 )
-from mfh.inference.mlx_research import MlxPromptFeatureCubeOutput
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_research import VllmPromptFeatureCubeOutput
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.provenance import stable_hash
 
 
@@ -78,7 +78,7 @@ class _Runtime:
         assert metadata == {}
         text = f"{prompt.prompt_id}:{question}"
         token_ids = (1, 2)
-        return MlxRenderedPrompt(
+        return VllmRenderedPrompt(
             text=text,
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             token_ids=token_ids,
@@ -89,7 +89,7 @@ class _Runtime:
     def generate(self, rendered, *, max_new_tokens):  # type: ignore[no-untyped-def]
         assert max_new_tokens == 48
         self.generation_calls += 1
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(3,),
             text="wrong.",
@@ -107,7 +107,7 @@ class _Runtime:
 
     def prompt_feature_cube(self, rendered, *, layers, sites):  # type: ignore[no-untyped-def]
         self.forward_calls += 1
-        return MlxPromptFeatureCubeOutput(
+        return VllmPromptFeatureCubeOutput(
             activations={
                 site: {
                     layer: np.full((1, 4), layer + site_index, dtype=np.float32)
@@ -121,7 +121,7 @@ class _Runtime:
         )
 
     def runtime_identity(self):  # type: ignore[no-untyped-def]
-        return {"runtime": "fake-mlx", "seed": 17}
+        return {"runtime": "fake-vllm", "seed": 17}
 
 
 class _FailRuntime(_Runtime):
@@ -140,7 +140,7 @@ class _FailRuntime(_Runtime):
 
 class _DifferentRuntime(_Runtime):
     def runtime_identity(self):  # type: ignore[no-untyped-def]
-        return {"runtime": "fake-mlx", "seed": 18}
+        return {"runtime": "fake-vllm", "seed": 18}
 
 
 def _prepared(root: Path):  # type: ignore[no-untyped-def]
@@ -159,11 +159,11 @@ def _prepared(root: Path):  # type: ignore[no-untyped-def]
         protocol=protocol,
     )
     model = ModelSpec(
-        name="qwen3.6-27b-mlx-4bit",
-        repository="mlx-community/Qwen3.6-27B-4bit",
-        revision="c000ac2c2057d94be3fa931000c31723aac53282",
-        runtime=Runtime.MLX,
-        quantization="affine-g64-mlx-4bit",
+        name="qwen3.6-27b-nvfp4",
+        repository="nvidia/Qwen3.6-27B-NVFP4",
+        revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+        runtime=Runtime.VLLM,
+        quantization="modelopt-mixed-nvfp4-fp8",
         num_layers=64,
     )
     workspace = write_e2_workspace(
@@ -202,7 +202,7 @@ def _prepared(root: Path):  # type: ignore[no-untyped-def]
         questions=questions,
         prompts=prompts,
         e1_sources=sources,
-        expected_runtime_identity={"runtime": "fake-mlx", "seed": 17},
+        expected_runtime_identity={"runtime": "fake-vllm", "seed": 17},
         shard_rows=4,
     )
     return workspace, questions, prompts, sources
@@ -335,7 +335,7 @@ def test_e2_capture_binds_mapping_objects_and_runtime_session_chain() -> None:
                 questions=questions,
                 prompts=prompts,
                 e1_sources=wrong_sources,
-                expected_runtime_identity={"runtime": "fake-mlx", "seed": 17},
+                expected_runtime_identity={"runtime": "fake-vllm", "seed": 17},
             )
         wrong_prompts = dict(prompts)
         wrong_prompts["P0-neutral"] = PromptSpec("wrong-prompt", "Neutral")
@@ -346,7 +346,7 @@ def test_e2_capture_binds_mapping_objects_and_runtime_session_chain() -> None:
                 questions=questions,
                 prompts=wrong_prompts,
                 e1_sources=sources,
-                expected_runtime_identity={"runtime": "fake-mlx", "seed": 17},
+                expected_runtime_identity={"runtime": "fake-vllm", "seed": 17},
             )
 
         run_e2_capture(
@@ -411,7 +411,7 @@ def test_e2_capture_recovers_valid_unclosed_hard_crash_session() -> None:
             "session_index": 1,
             "capture_plan_identity": plan["capture_plan_identity"],
             "rows_at_start": 2,
-            "runtime_identity": {"runtime": "fake-mlx", "seed": 17},
+            "runtime_identity": {"runtime": "fake-vllm", "seed": 17},
             "created_unix_ns": time.time_ns(),
             "previous_session_event_digest": sessions[-1]["session_event_digest"],
         }

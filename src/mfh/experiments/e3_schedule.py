@@ -1,4 +1,4 @@
-"""Frozen staged E3 construction and evaluation schedules for native MLX."""
+"""Frozen staged E3 construction and evaluation schedules for native VLLM."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Native Apple-MLX execution and semantic replay for frozen E10 M6 rows."""
+"""Native CUDA/vLLM execution and semantic replay for frozen E10 M6 rows."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ from mfh.experiments.e8_protected import (
     validate_wikitext_likelihood_evidence,
 )
 from mfh.experiments.e9_native import (
-    NativeE9MlxBackend,
+    NativeE9VllmBackend,
     _strict_runtime_arrays,
     _token_indices,
 )
@@ -61,11 +61,11 @@ from mfh.experiments.runner import (
     confirmatory_execution_receipt_body,
     validate_confirmatory_execution_receipt,
 )
-from mfh.inference.mlx_research import (
-    MlxOnlinePrefixCapture,
-    MlxResearchInterventionState,
+from mfh.inference.vllm_research import (
+    VllmOnlinePrefixCapture,
+    VllmResearchInterventionState,
 )
-from mfh.inference.mlx_runtime import MlxGenerationOutput
+from mfh.inference.vllm_runtime import VllmGenerationOutput
 from mfh.methods.composite import (
     CompositePolicy,
     EarlyReevaluation,
@@ -163,7 +163,7 @@ def _candidate_constraints(question: Question, text: str) -> dict[str, bool]:
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class NativeE10MlxBackend:
+class NativeE10VllmBackend:
     """Only accepted E10 backend: buffered M6 generation, gating, and scoring."""
 
     attestor: E6RuntimeAttestor
@@ -171,7 +171,7 @@ class NativeE10MlxBackend:
     grader_bundle: ConfirmatoryGraderBundle
     grader_transport: OpenRouterTransport
     _runtime: Any
-    _factual_backend: NativeE9MlxBackend
+    _factual_backend: NativeE9VllmBackend
     _policy_cache: dict[str, tuple[Path, CompositePolicy]]
     max_new_tokens: int
 
@@ -187,7 +187,7 @@ class NativeE10MlxBackend:
             type(attestor) is not E6RuntimeAttestor
             or type(grader_transport) is not OpenRouterTransport
         ):
-            raise DataValidationError("native E10 requires exact MLX attestor and transport")
+            raise DataValidationError("native E10 requires exact VLLM attestor and transport")
         runtime_path = Path(runtime_artifact).resolve()
         bundle = validate_confirmatory_grader_bundle(grader_bundle)
         if (
@@ -196,7 +196,7 @@ class NativeE10MlxBackend:
             or attestor.execution_public_key != bundle.scorer.execution_public_key
         ):
             raise FrozenArtifactError("native E10 runtime differs from its grader bundle")
-        factual = NativeE9MlxBackend(
+        factual = NativeE9VllmBackend(
             attestor=attestor,
             runtime_artifact=runtime_path,
             grader_bundle=bundle.directory,
@@ -541,7 +541,7 @@ class NativeE10MlxBackend:
         scope: TokenScope | None = None
         alpha = 0.0
         sparsity: float | None = None
-        selected_state: MlxResearchInterventionState | None = None
+        selected_state: VllmResearchInterventionState | None = None
         normalized: np.ndarray[Any, Any] | None = None
         direction_norm = 0.0
         intervention_states: dict[tuple[int, ActivationSite], Any] = {}
@@ -581,7 +581,7 @@ class NativeE10MlxBackend:
         assert policy.early_probe is not None
         early_schema = policy.early_probe.training_schema
         feature_token_count = _early_feature_limit(early_schema.activation_kind)
-        candidate: MlxGenerationOutput | None = None
+        candidate: VllmGenerationOutput | None = None
         candidate_text: str | None = None
         trace: dict[str, Any] | None = None
         post_scores: dict[str, float] | None = None
@@ -606,16 +606,16 @@ class NativeE10MlxBackend:
             for capture_key in capture_keys:
                 state = intervention_states.get(capture_key)
                 if state is None:
-                    state = MlxResearchInterventionState(capture_limit=feature_token_count)
+                    state = VllmResearchInterventionState(capture_limit=feature_token_count)
                     intervention_states[capture_key] = state
                 else:
-                    if not isinstance(state, MlxResearchInterventionState):
+                    if not isinstance(state, VllmResearchInterventionState):
                         raise FrozenArtifactError(
                             "M6 intervention state cannot capture early features"
                         )
                     state.capture_limit = feature_token_count
 
-            def decide_early(capture: MlxOnlinePrefixCapture) -> bool:
+            def decide_early(capture: VllmOnlinePrefixCapture) -> bool:
                 nonlocal early_features, post_scores, early, early_constraints
                 nonlocal early_prefix_text
                 early_prefix_text = capture.text
@@ -642,7 +642,7 @@ class NativeE10MlxBackend:
                 early_gate=decide_early,
             )
             candidate = online.generation
-            if type(candidate) is not MlxGenerationOutput or not candidate.text.strip():
+            if type(candidate) is not VllmGenerationOutput or not candidate.text.strip():
                 raise FrozenArtifactError("native E10 runtime returned an invalid generation")
             candidate_text = candidate.text
             if not online.early_gate_applied:
@@ -935,7 +935,7 @@ class NativeE10MlxBackend:
             likelihood_layer = layer if layer is not None else early_schema.layers[0]
             likelihood_site = site or early_schema.sites[0]
             likelihood_states: dict[int, Any] = {}
-            likelihood_state: MlxResearchInterventionState | None = None
+            likelihood_state: VllmResearchInterventionState | None = None
             if action == "intervene":
                 assert normalized is not None and scope is not None
                 likelihood_state = self._runtime.standardized_intervention_state(

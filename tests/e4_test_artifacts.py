@@ -21,14 +21,14 @@ from mfh.contracts import (
     Runtime,
     TokenScope,
 )
-from mfh.experiments import e4_caa_mlx
+from mfh.experiments import e4_caa_vllm
 from mfh.experiments.e3_construction import VerifiedE3ConstructionSnapshot
-from mfh.experiments.e4_caa_mlx import (
+from mfh.experiments.e4_caa_vllm import (
     finalize_m2_caa_artifact,
     prepare_m2_caa_work,
     run_m2_caa_work,
 )
-from mfh.inference.mlx_runtime import MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmRenderedPrompt
 from mfh.methods.features import (
     ActivationFeatureSchema,
     ActivationKind,
@@ -52,44 +52,59 @@ def active_qwen_runtime_identity() -> dict[str, Any]:
     """Small deterministic stand-in carrying the exact frozen Qwen runtime facts."""
 
     return {
-        "backend": "mlx",
-        "mlx": "0.31.2",
-        "mlx_lm": "0.31.3",
+        "backend": "vllm",
+        "vllm": "0.24.0",
+        "transformers": "5.2.0",
+        "torch": "2.11.0",
         "python": "3.11.14",
-        "machine_model": "Mac16,5",
-        "chip": "Apple M4 Max",
-        "unified_memory_bytes": 48 * 1024**3,
-        "physical_cpu_cores": 12,
-        "architecture": "arm64",
-        "os": "macOS 15.5",
-        "os_build": "24F74",
-        "model_class": "mlx_lm.models.qwen3_5.Model",
-        "tokenizer_class": "mlx_lm.tokenizer_utils.TokenizerWrapper",
+        "architecture": "x86_64",
+        "os": "Linux test",
+        "nvidia_driver": "570.00",
+        "gpu_name": "NVIDIA A100-SXM4-40GB",
+        "gpu_total_memory_bytes": 40_000_000_000,
+        "cuda_capability": "8.0",
+        "cuda_runtime": "12.9",
+        "tensor_parallel_size": 1,
+        "quantization_loader": "modelopt_mixed",
+        "quantization_config_class": (
+            "vllm.model_executor.layers.quantization.modelopt."
+            "ModelOptMixedPrecisionConfig"
+        ),
+        "quantization_execution": "marlin-w4a16-fp8-weight-only-on-sm80",
+        "model_class": (
+            "vllm.model_executor.models.qwen3_5."
+            "Qwen3_5ForConditionalGeneration"
+        ),
+        "tokenizer_class": "test.Tokenizer",
         "num_layers": 64,
+        "hidden_size": 5_120,
         "seed": 17,
-        "model_repository": "mlx-community/Qwen3.6-27B-4bit",
-        "model_revision": "c000ac2c2057d94be3fa931000c31723aac53282",
-        "model_quantization": "affine-g64-mlx-4bit",
+        "model_repository": "nvidia/Qwen3.6-27B-NVFP4",
+        "model_revision": "0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+        "model_quantization": "modelopt-mixed-nvfp4-fp8",
         "model_num_layers": 64,
         "snapshot_sha256": "c" * 64,
         "research_provenance": {
-            "model_repository": "mlx-community/Qwen3.6-27B-4bit",
-            "model_revision": "c000ac2c2057d94be3fa931000c31723aac53282",
-            "quantization": "affine-g64-mlx-4bit",
+            "model_repository": "nvidia/Qwen3.6-27B-NVFP4",
+            "model_revision": "0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+            "quantization": "modelopt-mixed-nvfp4-fp8",
             "verified_snapshot_digest": "d" * 64,
             "runtime_preflight_receipt_digest": "e" * 64,
             "runtime_policy_digest": "f" * 64,
             "research_toolchain_digest": "1" * 64,
         },
         "research_toolchain": {
-            "xcodebuild": "Xcode 16.4",
-            "metal_compiler": "Apple metal version 32023.98",
+            "vllm": "0.24.0",
+            "torch": "2.11.0",
+            "transformers": "5.2.0",
+            "numpy": "2.4.3",
+            "nvidia_driver": "570.00",
         },
     }
 
 
 class _Generation:
-    def __init__(self, question: Question, rendered: MlxRenderedPrompt) -> None:
+    def __init__(self, question: Question, rendered: VllmRenderedPrompt) -> None:
         self.sequence = 0
         self.question_id = question.question_id
         self.prompt_id = "P0-neutral"
@@ -113,7 +128,7 @@ class _Generation:
 
 
 class _Runtime:
-    def __init__(self, identity: dict[str, Any], rendered: MlxRenderedPrompt) -> None:
+    def __init__(self, identity: dict[str, Any], rendered: VllmRenderedPrompt) -> None:
         self.identity = identity
         self.rendered = rendered
 
@@ -126,13 +141,13 @@ class _Runtime:
         question: str,
         *,
         metadata: dict[str, Any] | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         del prompt, question, metadata
         return self.rendered
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: tuple[int, ...],
@@ -230,10 +245,10 @@ def build_e2_probe_bundle(root: Path) -> Path:
         benchmark="triviaqa",
         partition="T-controller-train",
         split_manifest_digest="2" * 64,
-        model_repository="mlx-community/Qwen3.6-27B-4bit",
-        model_revision="c000ac2c2057d94be3fa931000c31723aac53282",
-        runtime=Runtime.MLX,
-        quantization="affine-g64-mlx-4bit",
+        model_repository="nvidia/Qwen3.6-27B-NVFP4",
+        model_revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+        runtime=Runtime.VLLM,
+        quantization="modelopt-mixed-nvfp4-fp8",
         prompt_id="P0-neutral",
         prompt_sha256="3" * 64,
         activation_kind=ActivationKind.FINAL_PROMPT,
@@ -299,7 +314,7 @@ def build_e2_probe_bundle(root: Path) -> Path:
 
 
 def build_m2_caa_bundle(root: Path) -> Path:
-    """Build M2 through the real resumable constructor using a tiny fake MLX runtime."""
+    """Build M2 through the real resumable constructor using a tiny fake VLLM runtime."""
 
     question = Question(
         question_id="steer-0",
@@ -309,7 +324,7 @@ def build_m2_caa_bundle(root: Path) -> Path:
         split="T-steer",
     )
     text = "system:neutral\nuser:Question?\nassistant:"
-    rendered = MlxRenderedPrompt(
+    rendered = VllmRenderedPrompt(
         text=text,
         sha256=hashlib.sha256(text.encode()).hexdigest(),
         token_ids=(1, 2, 3),
@@ -336,7 +351,7 @@ def build_m2_caa_bundle(root: Path) -> Path:
     )
     patcher = pytest.MonkeyPatch()
     patcher.setattr(
-        e4_caa_mlx,
+        e4_caa_vllm,
         "load_verified_e3_construction_snapshot",
         lambda *_args, **_kwargs: snapshot,
     )

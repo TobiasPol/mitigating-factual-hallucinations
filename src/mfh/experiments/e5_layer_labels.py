@@ -1,4 +1,4 @@
-"""Signed native-MLX counterfactual labels for E5 layer routers."""
+"""Signed native-VLLM counterfactual labels for E5 layer routers."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from mfh.experiments.static_direction_sources import (
     ResolvedStaticDirection,
     resolve_static_direction,
 )
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt, as_numpy
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt, as_numpy
 from mfh.methods.features import FeatureComposition
 from mfh.methods.probes import ProbeDataset
 from mfh.provenance import canonical_json, sha256_file, sha256_path, stable_hash
@@ -49,7 +49,7 @@ _SHARD_STAGE = re.compile(r"^\.shard-\d{5}\.stage-[A-Za-z0-9._-]+$")
 _INVENTORY = frozenset({"plan.json", "run.lock", "shards"})
 _PROMPT_ID = "P0-neutral"
 _PROMPT_SHA256 = "5b08080e81d4032d853d3a30fda35e7670da6a81cc1ccf17f2b8fc5001bba684"
-_MAX_MEMORY_BYTES = 48 * 1024**3
+_MAX_MEMORY_BYTES = 40 * 1024**3
 _LABEL_RULE = "outcome-rank-C-A-I-then-fixed-best-then-recipe-order-v1"
 _ACTIVE_MODEL = ACTIVE_MODEL_IDENTITIES[ACTIVE_MODEL_NAME]
 _VERIFIED_LAYER_LABEL_DATA = object()
@@ -67,7 +67,7 @@ class E5LayerLabelRuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def standardized_intervention_state(
         self,
@@ -81,11 +81,11 @@ class E5LayerLabelRuntime(Protocol):
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[tuple[int, ActivationSite], Any],
-    ) -> MlxGenerationOutput: ...
+    ) -> VllmGenerationOutput: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -323,7 +323,7 @@ def _runtime_is_scientific(identity: Mapping[str, Any]) -> bool:
         identity.get("model_repository") == _ACTIVE_MODEL["repository"]
         and identity.get("model_revision") == _ACTIVE_MODEL["revision"]
         and identity.get("model_quantization") == _ACTIVE_MODEL["quantization"]
-        and identity.get("num_layers") == 64
+        and identity.get("num_layers") == _ACTIVE_MODEL["num_layers"]
         and isinstance(provenance, Mapping)
         and _SHA256.fullmatch(str(provenance.get("runtime_preflight_receipt_sha256"))) is not None
     )
@@ -377,7 +377,7 @@ def prepare_e5_layer_label_capture(
     max_new_tokens: int = 48,
     max_peak_memory_bytes: int = _MAX_MEMORY_BYTES,
 ) -> Mapping[str, Any]:
-    """Freeze the exact counterfactual layer-label schedule without loading MLX."""
+    """Freeze the exact counterfactual layer-label schedule without loading VLLM."""
 
     destination = validate_active_study_artifact_paths({"E5 layer-label capture": directory})[
         "E5 layer-label capture"
@@ -423,7 +423,7 @@ def prepare_e5_layer_label_capture(
     body = {
         "schema_version": 1,
         "phase": "E5-native-layer-label-capture",
-        "runner": "resumable-signed-native-mlx-counterfactual-layer-labels-v1",
+        "runner": "resumable-signed-native-vllm-counterfactual-layer-labels-v1",
         "runner_source_sha256": sha256_file(Path(__file__)),
         "recipe": recipe.to_dict(),
         "label_rule": _LABEL_RULE,
@@ -541,7 +541,7 @@ def _load_plan(directory: Path) -> dict[str, Any]:
         or identity != stable_hash(body)
         or body.get("schema_version") != 1
         or body.get("phase") != "E5-native-layer-label-capture"
-        or body.get("runner") != "resumable-signed-native-mlx-counterfactual-layer-labels-v1"
+        or body.get("runner") != "resumable-signed-native-vllm-counterfactual-layer-labels-v1"
         or body.get("runner_source_sha256") != sha256_file(Path(__file__))
         or body.get("label_rule") != _LABEL_RULE
         or body.get("schedule_sha256") != stable_hash(body.get("schedule"))
@@ -922,7 +922,7 @@ def _execution_record(
         max_new_tokens=plan["max_new_tokens"],
         intervention_states={(expected["layer"], ActivationSite(plan["intervention_site"])): state},
     )
-    if type(generated) is not MlxGenerationOutput or generated.rendered_prompt != rendered:
+    if type(generated) is not VllmGenerationOutput or generated.rendered_prompt != rendered:
         raise FrozenArtifactError("E5 layer-label runtime returned invalid generation")
     try:
         pre = np.ascontiguousarray(as_numpy(state.captured, dtype=np.float32))

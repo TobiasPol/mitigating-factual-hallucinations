@@ -15,6 +15,7 @@ from typing import Any
 from mfh.config import load_model_spec, load_prompt_specs
 from mfh.contracts import PromptSpec, Question
 from mfh.data.io import read_questions
+from mfh.data.reviewed_splits import validate_reviewed_split_snapshot
 from mfh.errors import DataValidationError, FrozenArtifactError
 from mfh.experiments.confirmatory_operator import (
     ConfirmatoryRunbook,
@@ -53,9 +54,6 @@ from mfh.experiments.runner import (
 from mfh.experiments.snapshots import validate_execution_snapshot
 from mfh.provenance import sha256_file, sha256_path
 
-_SPLIT_MANIFEST_DIGEST = (
-    "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
-)
 _FACTUAL_FILES = {
     "triviaqa": "triviaqa.jsonl",
     "simpleqa_verified": "simpleqa_verified.jsonl",
@@ -84,6 +82,25 @@ class _E10Context:
     controller: Path
     runtime_artifact: Path
     early_questions: Mapping[str, tuple[Question, ...]]
+    split_manifest_digest: str
+
+
+def _e1_split_manifest_digest(e1: Any) -> str:
+    try:
+        evidence = json.loads(
+            (e1.directory / "creation-evidence.json").read_text(encoding="utf-8")
+        )
+        descriptor = evidence["input_artifacts"]["deduplicated_splits"]
+        location = Path(descriptor["location"])
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise FrozenArtifactError("E1 creation evidence lacks reviewed splits") from exc
+    if not location.is_absolute():
+        location = (e1.directory / location).resolve()
+    manifest = validate_reviewed_split_snapshot(location)
+    digest = manifest.get("manifest_digest")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise FrozenArtifactError("E1 reviewed split manifest identity is invalid")
+    return digest
 
 
 def _write_once_json(path: Path, value: Mapping[str, Any]) -> None:
@@ -136,9 +153,10 @@ def _context(e8_runbook: str | Path, e9_runbook: str | Path) -> _E10Context:
     e1 = open_phase_prerequisite(
         paths["E1"], phase=ExperimentPhase.E1, study=e8_context.study
     )
+    split_manifest_digest = _e1_split_manifest_digest(e1)
     early = _reviewed_questions_from_e1(
         e1,
-        split_manifest_digest=_SPLIT_MANIFEST_DIGEST,
+        split_manifest_digest=split_manifest_digest,
         partitions=("T-controller", "T-dev"),
     )
     e6 = open_phase_prerequisite(
@@ -156,6 +174,7 @@ def _context(e8_runbook: str | Path, e9_runbook: str | Path) -> _E10Context:
         controller=components.controller_path,
         runtime_artifact=_e6_runtime_artifact(e6),
         early_questions=early,
+        split_manifest_digest=split_manifest_digest,
     )
 
 
@@ -182,7 +201,7 @@ def prepare_e10_freeze_suite(
         prompt=context.prompt,
         controller_artifact=context.controller,
         selection_provenance=context.provenance,
-        split_manifest_digest=_SPLIT_MANIFEST_DIGEST,
+        split_manifest_digest=context.split_manifest_digest,
         runtime_artifact=context.runtime_artifact,
     )
     return MappingProxyType(
@@ -204,7 +223,7 @@ def run_e10_freeze_capture(
     limit: int | None = None,
     shard_rows: int = 32,
 ) -> Mapping[str, Any]:
-    """Resume the native MLX early-token capture from the frozen plan."""
+    """Resume the native VLLM early-token capture from the frozen plan."""
 
     root = validate_active_study_artifact_paths({"E10 freeze suite": directory})[
         "E10 freeze suite"
@@ -227,7 +246,7 @@ def run_e10_freeze_capture(
             prompt=context.prompt,
             controller_artifact=context.controller,
             selection_provenance=context.provenance,
-            split_manifest_digest=_SPLIT_MANIFEST_DIGEST,
+            split_manifest_digest=context.split_manifest_digest,
             runtime_artifact=context.runtime_artifact,
             attestor=attestor,
             shard_rows=shard_rows,

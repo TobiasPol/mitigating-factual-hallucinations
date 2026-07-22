@@ -32,7 +32,7 @@ from mfh.experiments.e10_early_probe import (
     derive_e10_early_probe_capture_plan,
     load_e10_early_probe_selection,
 )
-from mfh.experiments.e10_native import NativeE10MlxBackend
+from mfh.experiments.e10_native import NativeE10VllmBackend
 from mfh.experiments.evidence import GateResult
 from mfh.experiments.gates import write_gate_evidence
 from mfh.experiments.model_selection import (
@@ -1194,15 +1194,15 @@ def load_e10_execution_assets(
 
 def execute_e10_pending(
     assets: E10ExecutionAssets,
-    backend: NativeE10MlxBackend,
+    backend: NativeE10VllmBackend,
     *,
     checkpoint_size: int = 1,
     limit: int | None = None,
 ) -> int:
     """Execute the one-shot schedule in deterministic resumable shard order."""
 
-    if type(backend) is not NativeE10MlxBackend:
-        raise DataValidationError("E10 execution requires the exact native MLX backend")
+    if type(backend) is not NativeE10VllmBackend:
+        raise DataValidationError("E10 execution requires the exact native VLLM backend")
     if checkpoint_size <= 0 or (limit is not None and limit <= 0):
         raise DataValidationError("E10 checkpoint size and limit must be positive")
     packaged_grader = assets.ledger.directory / "inputs" / "grader"

@@ -1,4 +1,4 @@
-"""Resumable native-MLX construction of the E4 M2 CAA residual vector bank."""
+"""Resumable native-VLLM construction of the E4 M2 CAA residual vector bank."""
 
 from __future__ import annotations
 
@@ -36,15 +36,16 @@ from mfh.experiments.model_selection import (
     validate_active_study_artifact_paths,
 )
 from mfh.inference.architecture import HookKey
-from mfh.inference.mlx_research import MlxTeacherForcedCubeOutput
-from mfh.inference.mlx_runtime import MlxRenderedPrompt
+from mfh.inference.vllm_research import VllmTeacherForcedCubeOutput
+from mfh.inference.vllm_runtime import VllmRenderedPrompt
 from mfh.methods.static import load_vector_bank
 from mfh.provenance import sha256_file, sha256_path, stable_hash
 
 _PROMPT_ID = "P0-neutral"
 _SITE = ActivationSite.BLOCK_OUTPUT
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_MEMORY_BYTES = 48 * 1024**3
+_MINIMUM_VRAM_BYTES = 40_000_000_000
+_MAXIMUM_VRAM_BYTES = 40 * 1024**3
 _ACTIVE_MODEL = ACTIVE_MODEL_IDENTITIES[ACTIVE_MODEL_NAME]
 _ACTIVE_HIDDEN_WIDTH = 5_120
 _WORK_FILES = frozenset({"plan.json", "pairs.jsonl", "sessions.jsonl", "checkpoints"})
@@ -70,16 +71,16 @@ class M2CAARuntime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def teacher_forced_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         sites: Sequence[ActivationSite],
-    ) -> MlxTeacherForcedCubeOutput: ...
+    ) -> VllmTeacherForcedCubeOutput: ...
 
 
 def _active_qwen_runtime_identity(value: object) -> bool:
@@ -98,17 +99,33 @@ def _active_qwen_runtime_identity(value: object) -> bool:
         "research_toolchain_digest",
     )
     return bool(
-        value.get("backend") == "mlx"
-        and value.get("mlx") == "0.31.2"
-        and value.get("mlx_lm") == "0.31.3"
-        and value.get("python") == "3.11.14"
-        and value.get("chip") == "Apple M4 Max"
-        and value.get("unified_memory_bytes") == _MEMORY_BYTES
-        and value.get("architecture") == "arm64"
-        and value.get("model_class") == "mlx_lm.models.qwen3_5.Model"
-        and value.get("tokenizer_class")
-        == "mlx_lm.tokenizer_utils.TokenizerWrapper"
+        value.get("backend") == "vllm"
+        and value.get("vllm") == "0.24.0"
+        and isinstance(value.get("python"), str)
+        and bool(value.get("python"))
+        and value.get("architecture") == "x86_64"
+        and isinstance(value.get("os"), str)
+        and bool(value.get("os"))
+        and isinstance(value.get("gpu_name"), str)
+        and "A100" in str(value.get("gpu_name"))
+        and type(value.get("gpu_total_memory_bytes")) is int
+        and int(value["gpu_total_memory_bytes"]) >= _MINIMUM_VRAM_BYTES
+        and value.get("cuda_capability") == "8.0"
+        and value.get("tensor_parallel_size") == 1
+        and value.get("quantization_loader") == "modelopt_mixed"
+        and value.get("quantization_config_class")
+        == (
+            "vllm.model_executor.layers.quantization.modelopt."
+            "ModelOptMixedPrecisionConfig"
+        )
+        and value.get("quantization_execution")
+        == "marlin-w4a16-fp8-weight-only-on-sm80"
+        and value.get("model_class")
+        == "vllm.model_executor.models.qwen3_5.Qwen3_5ForConditionalGeneration"
+        and isinstance(value.get("tokenizer_class"), str)
+        and bool(value.get("tokenizer_class"))
         and value.get("num_layers") == _ACTIVE_MODEL["num_layers"]
+        and value.get("hidden_size") == _ACTIVE_HIDDEN_WIDTH
         and value.get("seed") == 17
         and value.get("model_repository") == _ACTIVE_MODEL["repository"]
         and value.get("model_revision") == _ACTIVE_MODEL["revision"]
@@ -124,7 +141,8 @@ def _active_qwen_runtime_identity(value: object) -> bool:
             and _SHA256.fullmatch(str(provenance[name])) is not None
             for name in digest_fields
         )
-        and set(toolchain) == {"xcodebuild", "metal_compiler"}
+        and set(toolchain)
+        == {"vllm", "torch", "transformers", "numpy", "nvidia_driver"}
         and all(isinstance(item, str) and item for item in toolchain.values())
     )
 
@@ -190,7 +208,7 @@ class M2CAAArtifact:
             or self.layers != E2_LAYERS
             or self.site is not _SITE
             or self.maximum_peak_memory_bytes < 0
-            or self.maximum_peak_memory_bytes > _MEMORY_BYTES
+            or self.maximum_peak_memory_bytes > _MAXIMUM_VRAM_BYTES
             or any(
                 not isinstance(value, str)
                 or len(value) != 64
@@ -208,10 +226,10 @@ class M2CAAArtifact:
 @dataclass(slots=True)
 class _Accumulator:
     processed_pairs: int
-    counts: np.ndarray
-    difference_sums: np.ndarray
-    rms_elements: np.ndarray
-    rms_sum_squares: np.ndarray
+    counts: np.ndarray[Any, Any]
+    difference_sums: np.ndarray[Any, Any]
+    rms_elements: np.ndarray[Any, Any]
+    rms_sum_squares: np.ndarray[Any, Any]
 
 
 def _json_bytes(value: Mapping[str, Any]) -> bytes:
@@ -336,7 +354,7 @@ def _plan(
         )
     ):
         raise FrozenArtifactError(
-            "M2 CAA requires the exact scientific Qwen/M4 Max E3 runtime and width"
+            "M2 CAA requires the exact scientific Qwen/A100 vLLM E3 runtime and width"
         )
     pairs = _source_pairs(snapshot, questions, protocol=protocol)
     body = {
@@ -744,7 +762,7 @@ def _capture_pair(
     prompt: PromptSpec,
     protocol: M2CAAProtocol,
     hidden_width: int,
-) -> tuple[dict[str, Any], np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[dict[str, Any], np.ndarray[Any, Any], np.ndarray[Any, Any], np.ndarray[Any, Any]]:
     rendered = runtime.render_prompt(prompt, question.text, metadata=dict(question.metadata))
     if (
         rendered.sha256 != pair["rendered_prompt_sha256"]
@@ -768,7 +786,7 @@ def _capture_pair(
         or negative.response_text_sha256 != pair["negative_answer_sha256"]
     ):
         raise DataValidationError("M2 CAA teacher-forced response identity differs")
-    differences: list[np.ndarray] = []
+    differences: list[np.ndarray[Any, Any]] = []
     elements: list[int] = []
     squares: list[float] = []
     layer_receipts: list[dict[str, Any]] = []
@@ -853,7 +871,7 @@ def run_m2_caa_work(
         protocol=frozen,
     )
     if dict(runtime.runtime_identity()) != plan["runtime_identity"]:
-        raise FrozenArtifactError("M2 CAA runtime differs from the E3 native-MLX runtime")
+        raise FrozenArtifactError("M2 CAA runtime differs from the E3 native-VLLM runtime")
     question_map = {value.question_id: value for value in questions}
     with _lock(work / "plan.json"):
         receipts = _receipts(work / "pairs.jsonl", plan=plan)
@@ -1029,7 +1047,7 @@ def verify_m2_caa_work(
                 complete
                 and plan["scientific_eligible"]
                 and state.processed_pairs > 0
-                and peak <= _MEMORY_BYTES
+                and peak <= _MAXIMUM_VRAM_BYTES
             ),
         }
     )
@@ -1138,7 +1156,7 @@ def finalize_m2_caa_artifact(
                     "tensor_key": HookKey(layer, frozen.site).artifact_key,
                     "layer": layer,
                     "site": frozen.site.value,
-                    "source_method": "M2-CAA-native-MLX-teacher-forced-pairs",
+                    "source_method": "M2-CAA-native-VLLM-teacher-forced-pairs",
                     "positive_count": int(state.counts[index]),
                     "negative_count": int(state.counts[index]),
                 }
@@ -1306,7 +1324,7 @@ def verify_m2_caa_artifact(
         or manifest_body != expected_manifest
         or not np.array_equal(observed, expected_directions)
         or set(tensors) != {HookKey(layer, _SITE).artifact_key for layer in E2_LAYERS}
-        or peak > _MEMORY_BYTES
+        or peak > _MAXIMUM_VRAM_BYTES
     ):
         raise FrozenArtifactError("M2 CAA artifact differs from portable replay")
     return M2CAAArtifact(

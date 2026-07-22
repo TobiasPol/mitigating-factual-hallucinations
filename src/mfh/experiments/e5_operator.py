@@ -966,7 +966,7 @@ def promote_e5_phase_records(
     request_budget: int | None = None,
     checkpoint_rows: int = 250,
 ) -> Mapping[str, Any]:
-    """Resume promotion without invoking MLX or generating another answer."""
+    """Resume promotion without invoking VLLM or generating another answer."""
 
     if (
         (request_budget is not None and (type(request_budget) is not int or request_budget <= 0))

@@ -33,7 +33,7 @@ _REPORT_OUTPUTS = {
     "prompt_paraphrase_robustness",
     "safety_utility_noninferiority",
     "language_switching_confusion_matrices",
-    "local_mlx_runtime_validation",
+    "local_vllm_runtime_validation",
     "zero_error_confidence_bounds",
 }
 _AUDIT_BLINDING = {"model", "steering_condition", "system_prompt", "experimental_hypothesis"}

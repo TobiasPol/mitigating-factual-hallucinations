@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "policy_id": "qwen36-27b-nvfp4-a10040-vllm024",
+  "model": {
+    "name": "qwen3.6-27b-nvfp4",
+    "repository": "nvidia/Qwen3.6-27B-NVFP4",
+    "revision": "0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+    "quantization": "modelopt-mixed-nvfp4-fp8",
+    "num_layers": 64,
+    "hidden_size": 5120,
+    "candidate_layers": [16, 31, 32, 47, 48, 57, 63],
+    "model_class": "vllm.model_executor.models.qwen3_5.Qwen3_5ForConditionalGeneration",
+    "model_config": "configs/models/qwen3.6-27b-nvfp4.yaml",
+    "model_config_sha256": "adaa2aa1d55ae8e712078cae7e22dd3eccc0db4f8fd4c3b2e45feea3ce52d121",
+    "snapshot_manifest": "configs/models/qwen3.6-27b-nvfp4.snapshot.json",
+    "snapshot_manifest_sha256": "e2bdda10aa078b656b788dfcd0a3293693fd0da774deee4d7f333293c27c8fa5"
+  },
+  "hardware": {
+    "gpu_name_contains": "A100",
+    "minimum_vram_bytes": 40000000000,
+    "maximum_peak_memory_bytes": 40000000000,
+    "cuda_capability": "8.0",
+    "tensor_parallel_size": 1,
+    "quantization_loader": "modelopt_mixed",
+    "quantization_config_class": "vllm.model_executor.layers.quantization.modelopt.ModelOptMixedPrecisionConfig",
+    "quantization_execution": "marlin-w4a16-fp8-weight-only-on-sm80"
+  },
+  "software": {
+    "platform": "linux-x86_64",
+    "vllm": "0.24.0",
+    "install_extra": "cuda-a100"
+  },
+  "inference": {
+    "seed": 17,
+    "temperature": 0.0,
+    "do_sample": false,
+    "thinking_enabled": false,
+    "max_new_tokens": 48,
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.9
+  },
+  "validation": {
+    "preflight_prompt_sha256": "115049a298532be2f181edb03f766770c0db84c22aff39003fec340deaec7545",
+    "preflight_alpha": 2.0,
+    "probe_layers": {
+      "linear_attention": 32,
+      "full_attention": 31
+    },
+    "required_sites": ["post_attention", "post_mlp", "block_output"],
+    "required_checks": [
+      "zero_generation_exact_parity",
+      "exact_additive_delta",
+      "downstream_logprob_sensitivity"
+    ],
+    "source_bindings": {
+      "src/mfh/inference/vllm_worker.py": "57c37c968fbbba31ec5849dc31daf28e588b3f59cf0f25e2d43ba77008a67225",
+      "src/mfh/inference/vllm_runtime.py": "705906ef18ea995823d3e68a90a4163e5a5acc65a01f496f057aea5b424afafe",
+      "src/mfh/inference/vllm_research.py": "63dbab340a47df3c3d3dc9d08deebad4dd0562c650df0a376279639a5f6dd081",
+      "src/mfh/inference/vllm_preflight.py": "9e4c86007f35d4214bc3005c008b618e9a942d614c46a88763b8d7ea977e74ff"
+    }
+  },
+  "policy_digest": "758860aac89973db259ea1d1f91ca421695a721cf0f6a57461a1be746e6f626d"
+}

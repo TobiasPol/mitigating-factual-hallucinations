@@ -1,4 +1,4 @@
-"""Concrete native-MLX execution boundary for confirmatory E9 rows."""
+"""Concrete native-VLLM execution boundary for confirmatory E9 rows."""
 
 from __future__ import annotations
 
@@ -52,8 +52,8 @@ from mfh.experiments.runner import (
     confirmatory_execution_receipt_body,
 )
 from mfh.experiments.runtime_evidence import build_generation_runtime_metrics
-from mfh.inference.mlx_research import MlxResearchInterventionState
-from mfh.inference.mlx_runtime import MlxGenerationOutput, as_numpy
+from mfh.inference.vllm_research import VllmResearchInterventionState
+from mfh.inference.vllm_runtime import VllmGenerationOutput, as_numpy
 from mfh.provenance import sha256_file, stable_hash
 
 
@@ -71,10 +71,10 @@ def _token_indices(scope: TokenScope, output_tokens: int) -> list[int]:
 
 
 def _strict_runtime_arrays(
-    state: MlxResearchInterventionState, *, expected_applications: int
+    state: VllmResearchInterventionState, *, expected_applications: int
 ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any], np.ndarray[Any, Any]]:
     if (
-        type(state) is not MlxResearchInterventionState
+        type(state) is not VllmResearchInterventionState
         or len(state.applied_pre_history) != expected_applications
         or len(state.applied_post_history) != expected_applications
     ):
@@ -94,7 +94,7 @@ def _strict_runtime_arrays(
         or state.applications != expected_applications
         or expected_applications <= 0
     ):
-        raise FrozenArtifactError("confirmatory MLX hook did not execute its exact edit")
+        raise FrozenArtifactError("confirmatory VLLM hook did not execute its exact edit")
     delta = np.ascontiguousarray(intervened - captured)
     direction = np.ascontiguousarray(as_numpy(state.direction, dtype=np.float32))
     alphas = [
@@ -126,8 +126,8 @@ _CONFIRMATORY_MAX_NEW_TOKENS = 48
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class NativeE9MlxBackend:
-    """Only accepted E9 backend: live MLX generation plus frozen official grading."""
+class NativeE9VllmBackend:
+    """Only accepted E9 backend: live VLLM generation plus frozen official grading."""
 
     attestor: E6RuntimeAttestor
     runtime_artifact: Path
@@ -148,7 +148,7 @@ class NativeE9MlxBackend:
             type(attestor) is not E6RuntimeAttestor
             or type(grader_transport) is not OpenRouterTransport
         ):
-            raise DataValidationError("native E9 requires exact MLX attestor and transport")
+            raise DataValidationError("native E9 requires exact VLLM attestor and transport")
         runtime_path = Path(runtime_artifact).resolve()
         bundle = validate_confirmatory_grader_bundle(grader_bundle)
         runtime_sha = attestor.verify_runtime_artifact(runtime_path)
@@ -233,7 +233,7 @@ class NativeE9MlxBackend:
         condition: EvaluationCondition,
         component: ConfirmatoryFixedComponent,
         rendered: Any,
-    ) -> tuple[MlxGenerationOutput, dict[str, Any]]:
+    ) -> tuple[VllmGenerationOutput, dict[str, Any]]:
         values = np.ascontiguousarray(
             component.direction.detach().cpu().float().numpy(), dtype=np.float32
         )
@@ -249,8 +249,8 @@ class NativeE9MlxBackend:
             max_new_tokens=self.max_new_tokens,
             intervention_states={(component.layer, component.site): state},
         )
-        if type(generated) is not MlxGenerationOutput:
-            raise FrozenArtifactError("native E9 runtime returned a non-MLX generation")
+        if type(generated) is not VllmGenerationOutput:
+            raise FrozenArtifactError("native E9 runtime returned a non-VLLM generation")
         indices = _token_indices(component.token_scope, generated.output_tokens)
         captured, intervened, delta = _strict_runtime_arrays(
             state, expected_applications=len(indices)
@@ -292,7 +292,7 @@ class NativeE9MlxBackend:
         rendered: Any,
         controller_prompt_id: str,
     ) -> tuple[
-        MlxGenerationOutput,
+        VllmGenerationOutput,
         int | None,
         ActivationSite | None,
         TokenScope | None,
@@ -333,7 +333,7 @@ class NativeE9MlxBackend:
         site: ActivationSite | None = None
         scope: TokenScope | None = None
         alpha = 0.0
-        state: MlxResearchInterventionState | None = None
+        state: VllmResearchInterventionState | None = None
         normalized: np.ndarray[Any, Any] | None = None
         direction_norm = 0.0
         routing_weights = [float(value) for value in decision.routing_weights[0]]
@@ -381,8 +381,8 @@ class NativeE9MlxBackend:
             max_new_tokens=self.max_new_tokens,
             intervention_states=interventions,
         )
-        if type(generated) is not MlxGenerationOutput:
-            raise FrozenArtifactError("native E9 runtime returned a non-MLX generation")
+        if type(generated) is not VllmGenerationOutput:
+            raise FrozenArtifactError("native E9 runtime returned a non-VLLM generation")
         feature_values = np.ascontiguousarray(features.numpy(), dtype=np.float32)
         metadata: dict[str, Any] = {
             "policy_action": action,
@@ -636,7 +636,7 @@ class NativeE9MlxBackend:
                 "scores": dict(scores),
                 "predicted_hallucination_risk": scores["I"],
             }
-        if type(generated) is not MlxGenerationOutput or generated.rendered_prompt != rendered:
+        if type(generated) is not VllmGenerationOutput or generated.rendered_prompt != rendered:
             raise FrozenArtifactError("native E9 generation differs from rendered prompt")
         risk_evidence = execution_metadata.get("selective_risk_evidence")
         auxiliary_peak = (

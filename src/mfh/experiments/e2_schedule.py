@@ -496,12 +496,12 @@ def write_e2_workspace(
         raise FrozenArtifactError(f"refusing to overwrite E2 workspace: {destination}")
     _validate_e2_schedule(schedule, protocol)
     if (
-        model.runtime is not Runtime.MLX
+        model.runtime is not Runtime.VLLM
         or model.num_layers <= max(E2_LAYERS)
         or type(hidden_width) is not int
         or hidden_width <= 0
     ):
-        raise DataValidationError("E2 workspace requires the compatible MLX model geometry")
+        raise DataValidationError("E2 workspace requires the compatible VLLM model geometry")
     if any(
         type(name) is not str or type(value) is not str
         for name, value in input_fingerprints.items()
@@ -519,7 +519,7 @@ def write_e2_workspace(
         plan_body = {
             "schema_version": 1,
             "phase": "E2",
-            "runner": "native-mlx-streamed-float16-activations",
+            "runner": "native-vllm-streamed-float16-activations",
             "runner_source_sha256": sha256_file(Path(__file__)),
             "protocol": protocol.to_dict(),
             "scientific_eligible": protocol.scientific_eligible,
@@ -631,10 +631,10 @@ def verify_e2_workspace(directory: str | Path) -> VerifiedE2Workspace:
             )
             or type(model["num_layers"]) is not int
             or type(model["hidden_width"]) is not int
-            or model["runtime"] != Runtime.MLX.value
+            or model["runtime"] != Runtime.VLLM.value
             or model["num_layers"] <= max(E2_LAYERS)
         ):
-            raise TypeError("model has invalid JSON types or MLX geometry")
+            raise TypeError("model has invalid JSON types or VLLM geometry")
         rows: list[E2ScheduleRow] = []
         previous: str | None = None
         with (source / "schedule.jsonl").open(encoding="utf-8") as handle:
@@ -686,7 +686,7 @@ def verify_e2_workspace(directory: str | Path) -> VerifiedE2Workspace:
         type(plan.get("schema_version")) is not int
         or plan.get("schema_version") != 1
         or plan.get("phase") != "E2"
-        or plan.get("runner") != "native-mlx-streamed-float16-activations"
+        or plan.get("runner") != "native-vllm-streamed-float16-activations"
         or type(plan.get("schedule_rows")) is not int
         or type(plan.get("new_generations")) is not int
         or plan.get("scientific_eligible") is not protocol.scientific_eligible

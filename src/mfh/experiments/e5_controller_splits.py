@@ -13,7 +13,10 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from mfh.artifact_namespace import validate_active_study_artifact_paths
+from mfh.artifact_namespace import (
+    QWEN_STUDY_ARTIFACT_ROOT,
+    validate_active_study_artifact_paths,
+)
 from mfh.contracts import Question
 from mfh.data.io import read_questions, write_questions
 from mfh.data.reviewed_splits import validate_reviewed_split_snapshot
@@ -35,13 +38,10 @@ _FILES = MappingProxyType(
 )
 _INVENTORY = frozenset({*_FILES.values(), "manifest.json"})
 _ALGORITHM = "e2-semantic-group-exact-subset-v1"
-_REVIEWED_SPLIT_MANIFEST_DIGEST = (
-    "05e13f0193155551400fd636e8dd6d97e065dd80205133a9440ef13105bce148"
+_REVIEWED_SOURCE_RELATIVE = (
+    Path(QWEN_STUDY_ARTIFACT_ROOT) / "frozen/reviewed-splits/T-controller.jsonl"
 )
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_REVIEWED_SOURCE_RELATIVE = Path(
-    "artifacts/splits/triviaqa-reviewed/T-controller.jsonl"
-)
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -58,7 +58,11 @@ class VerifiedE5ControllerSplits:
         return str(self.manifest["manifest_digest"])
 
 
-def _source_questions(path: str | Path) -> tuple[Path, tuple[Question, ...]]:
+def _source_questions(
+    path: str | Path, *, expected_reviewed_split_manifest_digest: str
+) -> tuple[Path, tuple[Question, ...]]:
+    if _SHA256.fullmatch(expected_reviewed_split_manifest_digest) is None:
+        raise DataValidationError("reviewed split manifest must be a lowercase SHA-256")
     source = Path(path).resolve(strict=False)
     if source.is_symlink() or not source.is_file():
         raise FrozenArtifactError("E5 controller split source must be a regular file")
@@ -71,9 +75,8 @@ def _source_questions(path: str | Path) -> tuple[Path, tuple[Question, ...]]:
     )
     if (
         source != (_PROJECT_ROOT / _REVIEWED_SOURCE_RELATIVE)
-        or
-        source.name != "T-controller.jsonl"
-        or manifest.get("manifest_digest") != _REVIEWED_SPLIT_MANIFEST_DIGEST
+        or source.name != "T-controller.jsonl"
+        or manifest.get("manifest_digest") != expected_reviewed_split_manifest_digest
         or not isinstance(descriptor, Mapping)
         or descriptor.get("sha256") != sha256_file(source)
     ):
@@ -226,6 +229,7 @@ def write_e5_controller_splits(
     destination: str | Path,
     *,
     source_questions: str | Path,
+    expected_reviewed_split_manifest_digest: str,
 ) -> VerifiedE5ControllerSplits:
     """Atomically materialize the exact E2 4,000/1,000 controller split."""
 
@@ -234,7 +238,10 @@ def write_e5_controller_splits(
     )["E5 controller splits"]
     if output.exists() or output.is_symlink():
         raise FrozenArtifactError(f"refusing to overwrite E5 controller splits: {output}")
-    source, questions = _source_questions(source_questions)
+    source, questions = _source_questions(
+        source_questions,
+        expected_reviewed_split_manifest_digest=expected_reviewed_split_manifest_digest,
+    )
     train, calibration, assignments = _partition_questions(questions)
     output.parent.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.stage-", dir=output.parent))
@@ -262,6 +269,7 @@ def write_e5_controller_splits(
         output,
         source_questions=source,
         expected_manifest_digest=str(manifest["manifest_digest"]),
+        expected_reviewed_split_manifest_digest=expected_reviewed_split_manifest_digest,
     )
 
 
@@ -270,6 +278,7 @@ def verify_e5_controller_splits(
     *,
     source_questions: str | Path,
     expected_manifest_digest: str,
+    expected_reviewed_split_manifest_digest: str,
 ) -> VerifiedE5ControllerSplits:
     """Replay the E2 subdivision and reject any mutated or substituted row."""
 
@@ -294,7 +303,10 @@ def verify_e5_controller_splits(
         )
     ):
         raise FrozenArtifactError("E5 controller split inventory differs")
-    source, questions = _source_questions(source_questions)
+    source, questions = _source_questions(
+        source_questions,
+        expected_reviewed_split_manifest_digest=expected_reviewed_split_manifest_digest,
+    )
     train, calibration, assignments = _partition_questions(questions)
     expected_questions = {_TRAIN: train, _CALIBRATION: calibration}
     for partition, expected in expected_questions.items():

@@ -73,7 +73,7 @@ def test_e7_runbook_template_round_trips_without_secrets(tmp_path: Path) -> None
 
     assert digest == sha256_file(path)
     assert raw["phase"] == "E7"
-    assert raw["model_config"].endswith("qwen3.6-27b-mlx-4bit.yaml")
+    assert raw["model_config"].endswith("qwen3.6-27b-nvfp4.yaml")
     assert raw["sae_training_rows"] == 10_000
     assert raw["sae_validation_rows"] == 2_000
     assert len(runbook.sae_configs) == 6
@@ -119,7 +119,7 @@ def test_e8_runbook_template_round_trips_without_secrets(tmp_path: Path) -> None
 
     assert digest == sha256_file(path)
     assert raw["phase"] == "E8"
-    assert raw["model_config"].endswith("qwen3.6-27b-mlx-4bit.yaml")
+    assert raw["model_config"].endswith("qwen3.6-27b-nvfp4.yaml")
     assert raw["source_artifacts"]["triviaqa"].endswith(".parquet")
     assert raw["candidate_question_count"] == 500
     assert raw["variant_factual_rows"] == 500

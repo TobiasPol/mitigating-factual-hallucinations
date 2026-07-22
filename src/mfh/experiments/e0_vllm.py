@@ -1,4 +1,4 @@
-"""Resumable, tamper-evident E0 execution for the sole active Qwen MLX model."""
+"""Resumable, tamper-evident E0 execution for the sole active Qwen VLLM model."""
 
 from __future__ import annotations
 
@@ -37,12 +37,12 @@ from mfh.experiments.model_selection import (
 )
 from mfh.experiments.protocol import ExperimentPhase, load_study_protocol
 from mfh.experiments.runner import EvaluationCondition
-from mfh.inference.mlx_preflight import validate_mlx_preflight_receipt
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt, MlxRuntime
 from mfh.inference.transformers_snapshot import (
     reject_symlink_path_components,
     verify_transformers_snapshot,
 )
+from mfh.inference.vllm_preflight import validate_vllm_preflight_receipt
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt, VllmRuntime
 from mfh.provenance import sha256_file, stable_hash
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -62,8 +62,9 @@ _FINAL_FILES = frozenset(
         "manifest.json",
     }
 )
-_MLX_MODEL_CLASS = "mlx_lm.models.qwen3_5.Model"
-_MLX_TOKENIZER_CLASS = "mlx_lm.tokenizer_utils.TokenizerWrapper"
+_VLLM_MODEL_CLASS = (
+    "vllm.model_executor.models.qwen3_5.Qwen3_5ForConditionalGeneration"
+)
 
 
 class _Runtime(Protocol):
@@ -73,11 +74,11 @@ class _Runtime(Protocol):
         question: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-    ) -> MlxRenderedPrompt: ...
+    ) -> VllmRenderedPrompt: ...
 
     def generate(
-        self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-    ) -> MlxGenerationOutput: ...
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput: ...
 
     def runtime_identity(self) -> Mapping[str, Any]: ...
 
@@ -181,22 +182,22 @@ def _descriptor(path: Path) -> dict[str, Any]:
 
 def _verify_inventory(directory: Path, expected: frozenset[str], *, exact: bool) -> None:
     if directory.is_symlink() or not directory.is_dir():
-        raise DataValidationError("E0 MLX artifact must be a regular directory")
+        raise DataValidationError("E0 VLLM artifact must be a regular directory")
     files: set[str] = set()
     directories: set[str] = set()
     for item in directory.rglob("*"):
         if item.is_symlink():
-            raise DataValidationError("E0 MLX artifact cannot contain symlinks")
+            raise DataValidationError("E0 VLLM artifact cannot contain symlinks")
         relative = item.relative_to(directory).as_posix()
         if item.is_file():
             files.add(relative)
         elif item.is_dir():
             directories.add(relative)
         else:
-            raise DataValidationError("E0 MLX artifact contains a special file")
+            raise DataValidationError("E0 VLLM artifact contains a special file")
     if directories or not files <= expected or (exact and files != expected):
         raise DataValidationError(
-            f"E0 MLX inventory differs: files={sorted(files)}, directories={sorted(directories)}"
+            f"E0 VLLM inventory differs: files={sorted(files)}, directories={sorted(directories)}"
         )
 
 
@@ -224,30 +225,30 @@ def _prepare(
     )
     questions = tuple(read_questions(cohort_directory / "questions.jsonl"))
     if len(questions) != _QUESTIONS:
-        raise DataValidationError("E0 MLX requires exactly 500 questions")
+        raise DataValidationError("E0 VLLM requires exactly 500 questions")
     model = load_model_spec(model_config)
     validate_active_model_spec(model)
-    if model.runtime is not Runtime.MLX:
-        raise ConfigurationError("E0 MLX requires the sole MLX model config")
+    if model.runtime is not Runtime.VLLM:
+        raise ConfigurationError("E0 VLLM requires the sole VLLM model config")
     amendment_path = study_config.parent / "model-selection-amendment.json"
     amendment = load_model_selection_amendment(
         amendment_path,
         model_config_directory=study_config.parent.parent / "models",
     )
     if amendment["amendment_digest"] != APPROVED_AMENDMENT_DIGEST:
-        raise ConfigurationError("E0 MLX requires the approved local amendment")
+        raise ConfigurationError("E0 VLLM requires the approved local amendment")
     snapshot_identity = verify_transformers_snapshot(
         model, snapshot_directory, snapshot_manifest
     )
     active_models = amendment.get("active_models")
     active_model = active_models[0] if isinstance(active_models, list) and active_models else None
     if not isinstance(active_model, Mapping):
-        raise DataValidationError("E0 MLX active model declaration is invalid")
+        raise DataValidationError("E0 VLLM active model declaration is invalid")
     project_root = study_config.absolute().parents[2]
     policy_reference = active_model.get("runtime_policy")
     if not isinstance(policy_reference, str):
-        raise DataValidationError("E0 MLX active runtime policy is invalid")
-    runtime = validate_mlx_preflight_receipt(
+        raise DataValidationError("E0 VLLM active runtime policy is invalid")
+    runtime = validate_vllm_preflight_receipt(
         runtime_config,
         project_root=project_root,
         model_config=model_config,
@@ -263,11 +264,11 @@ def _prepare(
         or not isinstance(runtime_model.get("snapshot_identity"), Mapping)
         or runtime_model.get("snapshot_identity") != snapshot_identity
     ):
-        raise DataValidationError("E0 MLX runtime preflight receipt differs from live inputs")
+        raise DataValidationError("E0 VLLM runtime preflight receipt differs from live inputs")
     prompts = {value.prompt_id: value for value in load_prompt_specs(prompt_config)}
     prompt = prompts.get("P0-neutral")
     if prompt is None:
-        raise ConfigurationError("E0 MLX requires P0-neutral")
+        raise ConfigurationError("E0 VLLM requires P0-neutral")
     inference = load_inference_protocol(inference_config)
     if (
         inference.temperature != 0.0
@@ -277,11 +278,11 @@ def _prepare(
         or inference.retrieval_enabled
         or inference.tools_enabled
     ):
-        raise ConfigurationError("E0 MLX inference settings differ from deterministic decode")
+        raise ConfigurationError("E0 VLLM inference settings differ from deterministic decode")
     study = load_study_protocol(study_config)
     phase = study.phase(ExperimentPhase.E0)
     if phase.models != (model.name,) or phase.question_limit != _QUESTIONS:
-        raise ConfigurationError("study protocol does not declare the sole E0 MLX leg")
+        raise ConfigurationError("study protocol does not declare the sole E0 VLLM leg")
     condition = EvaluationCondition(
         phase=ExperimentPhase.E0,
         benchmark="shared_benign_factual_500",
@@ -333,7 +334,7 @@ def _static_plan(prepared: _Prepared, runtime_identity: Mapping[str, Any]) -> di
     body: dict[str, Any] = {
         "schema_version": 1,
         "phase": "E0",
-        "runner": "native-mlx",
+        "runner": "native-vllm",
         "model": {
             "name": prepared.model.name,
             "repository": prepared.model.repository,
@@ -367,15 +368,15 @@ def _validate_runtime_identity(
 ) -> None:
     frozen = prepared.runtime_config.get("runtime_identity")
     if not isinstance(frozen, Mapping):
-        raise DataValidationError("MLX preflight receipt lacks runtime identity")
+        raise DataValidationError("VLLM preflight receipt lacks runtime identity")
     expected = dict(frozen)
     if (
-        expected.get("model_class") != _MLX_MODEL_CLASS
-        or expected.get("tokenizer_class") != _MLX_TOKENIZER_CLASS
+        expected.get("model_class") != _VLLM_MODEL_CLASS
+        or not isinstance(expected.get("tokenizer_class"), str)
         or expected.get("num_layers") != prepared.model.num_layers
         or expected.get("seed") != 17
     ):
-        raise DataValidationError("MLX preflight receipt runtime identity is invalid")
+        raise DataValidationError("VLLM preflight receipt runtime identity is invalid")
     if dict(runtime_identity) != expected:
         differing = sorted(
             key
@@ -383,7 +384,7 @@ def _validate_runtime_identity(
             if runtime_identity.get(key) != expected.get(key)
         )
         raise DataValidationError(
-            "live MLX runtime identity differs from frozen receipt: "
+            "live VLLM runtime identity differs from frozen receipt: "
             + ", ".join(differing)
         )
 
@@ -391,15 +392,15 @@ def _validate_runtime_identity(
 def _load_or_create_plan(work: Path, expected: Mapping[str, Any]) -> dict[str, Any]:
     path = work / "plan.json"
     if path.exists():
-        observed = _read_json(path, "E0 MLX plan")
+        observed = _read_json(path, "E0 VLLM plan")
         if observed != dict(expected):
-            raise DataValidationError("E0 MLX work directory belongs to another plan")
+            raise DataValidationError("E0 VLLM work directory belongs to another plan")
         return observed
     _write_json_once(path, expected)
     return dict(expected)
 
 
-def _render_all(prepared: _Prepared, runtime: _Runtime) -> tuple[MlxRenderedPrompt, ...]:
+def _render_all(prepared: _Prepared, runtime: _Runtime) -> tuple[VllmRenderedPrompt, ...]:
     return tuple(
         runtime.render_prompt(
             prepared.prompt, question.text, metadata=dict(question.metadata)
@@ -409,7 +410,7 @@ def _render_all(prepared: _Prepared, runtime: _Runtime) -> tuple[MlxRenderedProm
 
 
 def _request_digest(
-    prepared: _Prepared, question: Question, rendered: MlxRenderedPrompt
+    prepared: _Prepared, question: Question, rendered: VllmRenderedPrompt
 ) -> str:
     return stable_hash(
         {
@@ -431,8 +432,8 @@ def _record_body(
     session_index: int,
     plan_identity: str,
     question: Question,
-    rendered: MlxRenderedPrompt,
-    generation: MlxGenerationOutput,
+    rendered: VllmRenderedPrompt,
+    generation: VllmGenerationOutput,
     prepared: _Prepared,
     previous_digest: str | None,
 ) -> dict[str, Any]:
@@ -481,13 +482,13 @@ def _validate_record(
     sequence: int,
     previous_digest: str | None,
     prepared: _Prepared,
-    rendered: Sequence[MlxRenderedPrompt],
+    rendered: Sequence[VllmRenderedPrompt],
     plan_identity: str,
 ) -> None:
     body = dict(row)
     digest = body.pop("record_digest", None)
     if digest != stable_hash(body):
-        raise DataValidationError("E0 MLX record digest differs")
+        raise DataValidationError("E0 VLLM record digest differs")
     question_index = sequence // _REPEATS
     repeat_index = sequence % _REPEATS
     question = prepared.questions[question_index]
@@ -504,7 +505,7 @@ def _validate_record(
         or row.get("request_digest") != _request_digest(prepared, question, prompt)
         or row.get("previous_record_digest") != previous_digest
     ):
-        raise DataValidationError("E0 MLX record differs from frozen schedule")
+        raise DataValidationError("E0 VLLM record differs from frozen schedule")
     raw = row.get("raw_output")
     tokens = row.get("token_ids")
     if (
@@ -518,10 +519,10 @@ def _validate_record(
         or row.get("outcome")
         != deterministic_short_answer_grade(raw, question.aliases).value
     ):
-        raise DataValidationError("E0 MLX output evidence differs")
+        raise DataValidationError("E0 VLLM output evidence differs")
     exact_match, token_f1 = triviaqa_scores(raw, question.aliases)
     if row.get("exact_match") != exact_match or row.get("token_f1") != token_f1:
-        raise DataValidationError("E0 MLX grading evidence differs")
+        raise DataValidationError("E0 VLLM grading evidence differs")
     integer_fields = (
         "session_index",
         "input_tokens",
@@ -536,7 +537,7 @@ def _validate_record(
         or int(row[name]) < 0
         for name in integer_fields
     ):
-        raise DataValidationError("E0 MLX integer metric is invalid")
+        raise DataValidationError("E0 VLLM integer metric is invalid")
     number_fields = (
         "latency_seconds",
         "prompt_tokens_per_second",
@@ -549,19 +550,19 @@ def _validate_record(
         or not math.isfinite(float(row[name]))
         for name in number_fields
     ):
-        raise DataValidationError("E0 MLX timing metric is invalid")
+        raise DataValidationError("E0 VLLM timing metric is invalid")
 
 
 def _load_records(
     path: Path,
     *,
     prepared: _Prepared,
-    rendered: Sequence[MlxRenderedPrompt],
+    rendered: Sequence[VllmRenderedPrompt],
     plan_identity: str,
 ) -> list[dict[str, Any]]:
-    rows = _read_jsonl(path, "E0 MLX records")
+    rows = _read_jsonl(path, "E0 VLLM records")
     if len(rows) > _RECORDS:
-        raise DataValidationError("E0 MLX record count exceeds the frozen schedule")
+        raise DataValidationError("E0 VLLM record count exceeds the frozen schedule")
     previous: str | None = None
     for sequence, row in enumerate(rows):
         _validate_record(
@@ -584,7 +585,7 @@ def _append_session(
     plan_identity: str,
     details: Mapping[str, Any],
 ) -> None:
-    prior = _read_jsonl(path, "E0 MLX session log")
+    prior = _read_jsonl(path, "E0 VLLM session log")
     previous = str(prior[-1]["event_digest"]) if prior else None
     body = {
         "schema_version": 1,
@@ -601,7 +602,7 @@ def _append_session(
 def _validate_sessions(
     path: Path, *, plan_identity: str, allow_open: bool = False
 ) -> list[dict[str, Any]]:
-    rows = _read_jsonl(path, "E0 MLX session log")
+    rows = _read_jsonl(path, "E0 VLLM session log")
     previous: str | None = None
     open_sessions: set[int] = set()
     for row in rows:
@@ -618,18 +619,18 @@ def _validate_sessions(
             or not isinstance(index, int)
             or index < 0
         ):
-            raise DataValidationError("E0 MLX session event chain differs")
+            raise DataValidationError("E0 VLLM session event chain differs")
         if event == "start":
             if index in open_sessions:
-                raise DataValidationError("E0 MLX session starts twice")
+                raise DataValidationError("E0 VLLM session starts twice")
             open_sessions.add(index)
         else:
             if index not in open_sessions:
-                raise DataValidationError("E0 MLX session ends without a start")
+                raise DataValidationError("E0 VLLM session ends without a start")
             open_sessions.remove(index)
         previous = str(digest)
     if open_sessions and not allow_open:
-        raise DataValidationError("E0 MLX session log has an unclosed session")
+        raise DataValidationError("E0 VLLM session log has an unclosed session")
     return rows
 
 
@@ -660,7 +661,7 @@ def _emit_checkpoint(
     digest = _resume_checkpoint(plan_identity, records, sessions)
     payload = {
         "schema_version": 1,
-        "event": "e0-mlx-resume-checkpoint",
+        "event": "e0-vllm-resume-checkpoint",
         "reason": reason,
         "plan_identity": plan_identity,
         "records_completed": len(records),
@@ -673,7 +674,7 @@ def _emit_checkpoint(
 
 
 def _prompt_rows(
-    prepared: _Prepared, rendered: Sequence[MlxRenderedPrompt]
+    prepared: _Prepared, rendered: Sequence[VllmRenderedPrompt]
 ) -> Iterable[Mapping[str, Any]]:
     for question, prompt in zip(prepared.questions, rendered, strict=True):
         yield {
@@ -715,7 +716,7 @@ def _generation_records(
                 benchmark=prepared.condition.benchmark,
                 model_repository=prepared.model.repository,
                 model_revision=prepared.model.revision,
-                runtime=Runtime.MLX,
+                runtime=Runtime.VLLM,
                 quantization=prepared.model.quantization,
                 system_prompt_id=prepared.prompt.prompt_id,
                 rendered_prompt_hash=str(row["rendered_prompt_sha256"]),
@@ -801,12 +802,12 @@ def _publish(
     *,
     work: Path,
     prepared: _Prepared,
-    rendered: Sequence[MlxRenderedPrompt],
+    rendered: Sequence[VllmRenderedPrompt],
     plan: Mapping[str, Any],
     records: Sequence[Mapping[str, Any]],
 ) -> Mapping[str, Any]:
     if output.exists():
-        raise FrozenArtifactError(f"refusing to overwrite E0 MLX bundle: {output}")
+        raise FrozenArtifactError(f"refusing to overwrite E0 VLLM bundle: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.stage-", dir=output.parent))
     try:
@@ -824,7 +825,7 @@ def _publish(
         body: dict[str, Any] = {
             "schema_version": 1,
             "phase": "E0",
-            "completed_scope": "sole-qwen3.6-27b-mlx-4bit-runtime",
+            "completed_scope": "sole-qwen3.6-27b-nvfp4-runtime",
             "model_name": prepared.model.name,
             "plan_identity": plan["plan_identity"],
             "condition_id": prepared.condition.condition_id,
@@ -863,19 +864,19 @@ def _verify_with_prepared(
     expected_manifest_digest: str,
     expected_plan_identity: str,
     prepared: _Prepared,
-    rendered: Sequence[MlxRenderedPrompt],
+    rendered: Sequence[VllmRenderedPrompt],
 ) -> Mapping[str, Any]:
     _verify_inventory(directory, _FINAL_FILES, exact=True)
-    manifest = _read_json(directory / "manifest.json", "E0 MLX manifest")
+    manifest = _read_json(directory / "manifest.json", "E0 VLLM manifest")
     body = dict(manifest)
     digest = body.pop("manifest_digest", None)
     if digest != stable_hash(body) or digest != expected_manifest_digest:
-        raise DataValidationError("E0 MLX manifest identity differs")
-    plan = _read_json(directory / "plan.json", "E0 MLX plan")
+        raise DataValidationError("E0 VLLM manifest identity differs")
+    plan = _read_json(directory / "plan.json", "E0 VLLM plan")
     if plan.get("plan_identity") != expected_plan_identity:
-        raise DataValidationError("E0 MLX plan identity differs")
+        raise DataValidationError("E0 VLLM plan identity differs")
     if plan.get("input_hashes") != dict(prepared.input_hashes):
-        raise DataValidationError("E0 MLX plan live input hashes differ")
+        raise DataValidationError("E0 VLLM plan live input hashes differ")
     records = _load_records(
         directory / "records.jsonl",
         prepared=prepared,
@@ -883,43 +884,44 @@ def _verify_with_prepared(
         plan_identity=expected_plan_identity,
     )
     if len(records) != _RECORDS:
-        raise DataValidationError("E0 MLX final records are incomplete")
+        raise DataValidationError("E0 VLLM final records are incomplete")
     _validate_sessions(directory / "sessions.jsonl", plan_identity=expected_plan_identity)
-    if _read_jsonl(directory / "prompts.jsonl", "E0 MLX prompts") != list(
+    if _read_jsonl(directory / "prompts.jsonl", "E0 VLLM prompts") != list(
         _prompt_rows(prepared, rendered)
     ):
-        raise DataValidationError("E0 MLX prompt evidence differs")
+        raise DataValidationError("E0 VLLM prompt evidence differs")
     determinism = list(_determinism_rows(records))
-    if _read_jsonl(directory / "determinism.jsonl", "E0 MLX determinism") != determinism:
-        raise DataValidationError("E0 MLX determinism evidence differs")
+    if _read_jsonl(directory / "determinism.jsonl", "E0 VLLM determinism") != determinism:
+        raise DataValidationError("E0 VLLM determinism evidence differs")
     if any(row["exact_match"] is not True for row in determinism):
-        raise DataValidationError("E0 MLX repeated generations are not deterministic")
+        raise DataValidationError("E0 VLLM repeated generations are not deterministic")
     expected_generation = [value.to_dict() for value in _generation_records(records, prepared)]
     observed_generation = _read_jsonl(
-        directory / "generation-records.jsonl", "E0 MLX generation records"
+        directory / "generation-records.jsonl", "E0 VLLM generation records"
     )
     if observed_generation != expected_generation:
-        raise DataValidationError("E0 MLX canonical generation records differ")
-    if _read_json(directory / "summary.json", "E0 MLX summary") != _summary(records):
-        raise DataValidationError("E0 MLX summary differs")
+        raise DataValidationError("E0 VLLM canonical generation records differ")
+    if _read_json(directory / "summary.json", "E0 VLLM summary") != _summary(records):
+        raise DataValidationError("E0 VLLM summary differs")
     artifacts = {
         name: _descriptor(directory / name)
         for name in sorted(_FINAL_FILES - {"manifest.json"})
     }
     if manifest.get("artifacts") != artifacts:
-        raise DataValidationError("E0 MLX artifact descriptors differ")
+        raise DataValidationError("E0 VLLM artifact descriptors differ")
     return manifest
 
 
 def _load_tokenizer_renderer(prepared: _Prepared) -> _Runtime:
     try:
-        from mlx_lm.tokenizer_utils import load as load_tokenizer
-    except ImportError as exc:  # pragma: no cover - non-Apple verification host
-        raise ConfigurationError("MLX tokenizer verification requires mlx-lm") from exc
-    tokenizer = load_tokenizer(prepared.snapshot)
-    fake_model = type("Model", (), {"layers": [None] * prepared.model.num_layers})()
-    runtime = MlxRuntime(
-        model=fake_model,
+        from transformers import AutoTokenizer
+    except ImportError as exc:  # pragma: no cover - optional verification dependency
+        raise ConfigurationError("vLLM tokenizer verification requires transformers") from exc
+    tokenizer = AutoTokenizer.from_pretrained(
+        str(prepared.snapshot), local_files_only=True, trust_remote_code=False
+    )
+    runtime = VllmRuntime(
+        engine=None,
         tokenizer=tokenizer,
         model_spec=prepared.model,
         snapshot=prepared.snapshot,
@@ -932,12 +934,12 @@ def _load_tokenizer_renderer(prepared: _Prepared) -> _Runtime:
             question: str,
             *,
             metadata: Mapping[str, Any] | None = None,
-        ) -> MlxRenderedPrompt:
+        ) -> VllmRenderedPrompt:
             return runtime.render_prompt(prompt, question, metadata=metadata)
 
         def generate(
-            self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-        ) -> MlxGenerationOutput:
+            self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+        ) -> VllmGenerationOutput:
             raise AssertionError("verification renderer cannot generate")
 
         def runtime_identity(self) -> Mapping[str, Any]:
@@ -949,7 +951,7 @@ def _load_tokenizer_renderer(prepared: _Prepared) -> _Runtime:
     return TokenizerRenderer()
 
 
-def run_mlx_e0(
+def run_vllm_e0(
     *,
     cohort_directory: str | Path,
     reserved_source: str | Path,
@@ -970,16 +972,16 @@ def run_mlx_e0(
     checkpoint_file: str | Path | None = None,
     runtime_factory: Callable[[ModelSpec, Path], _Runtime] | None = None,
 ) -> Mapping[str, Any]:
-    """Run or resume the exact 500-question, two-pass native MLX E0 leg."""
+    """Run or resume the exact 500-question, two-pass native VLLM E0 leg."""
 
     if request_budget is not None and (
         isinstance(request_budget, bool)
         or not isinstance(request_budget, int)
         or request_budget <= 0
     ):
-        raise ConfigurationError("E0 MLX request budget must be a positive integer")
+        raise ConfigurationError("E0 VLLM request budget must be a positive integer")
     if expected_resume_checkpoint is not None:
-        _require_sha256(expected_resume_checkpoint, "expected E0 MLX resume checkpoint")
+        _require_sha256(expected_resume_checkpoint, "expected E0 VLLM resume checkpoint")
     paths = {
         "cohort_directory": Path(cohort_directory).absolute(),
         "reserved_source": Path(reserved_source).absolute(),
@@ -991,10 +993,10 @@ def run_mlx_e0(
         "inference_config": Path(inference_config).absolute(),
         "study_config": Path(study_config).absolute(),
     }
-    work = reject_symlink_path_components(work_directory, "E0 MLX work directory")
-    output = reject_symlink_path_components(output_directory, "E0 MLX output directory")
+    work = reject_symlink_path_components(work_directory, "E0 VLLM work directory")
+    output = reject_symlink_path_components(output_directory, "E0 VLLM output directory")
     checkpoint = (
-        reject_symlink_path_components(checkpoint_file, "E0 MLX checkpoint file")
+        reject_symlink_path_components(checkpoint_file, "E0 VLLM checkpoint file")
         if checkpoint_file is not None
         else None
     )
@@ -1007,17 +1009,17 @@ def run_mlx_e0(
         or checkpoint.is_relative_to(work)
         or checkpoint.is_relative_to(output)
     ):
-        raise ConfigurationError("E0 MLX checkpoint file must stay outside work and output")
+        raise ConfigurationError("E0 VLLM checkpoint file must stay outside work and output")
     if output.exists():
-        raise FrozenArtifactError(f"refusing to overwrite E0 MLX bundle: {output}")
+        raise FrozenArtifactError(f"refusing to overwrite E0 VLLM bundle: {output}")
     work.mkdir(parents=True, exist_ok=True)
     _verify_inventory(work, _WORK_FILES, exact=False)
     resume = (work / "plan.json").exists()
     if resume != (expected_resume_checkpoint is not None):
         raise ConfigurationError(
-            "existing E0 MLX work requires its external resume checkpoint"
+            "existing E0 VLLM work requires its external resume checkpoint"
             if resume
-            else "an E0 MLX resume checkpoint cannot initialize new work"
+            else "an E0 VLLM resume checkpoint cannot initialize new work"
         )
     prepared = _prepare(
         **paths,
@@ -1026,12 +1028,12 @@ def run_mlx_e0(
         contamination_manifest_digest=contamination_manifest_digest,
     )
     factory = runtime_factory or (
-        lambda model, snapshot: MlxRuntime.from_spec(model, snapshot_path=snapshot, seed=17)
+        lambda model, snapshot: VllmRuntime.from_spec(model, snapshot_path=snapshot, seed=17)
     )
     runtime: _Runtime | None = None
     records: list[dict[str, Any]] = []
     plan: Mapping[str, Any] | None = None
-    rendered: tuple[MlxRenderedPrompt, ...] = ()
+    rendered: tuple[VllmRenderedPrompt, ...] = ()
     session_index = -1
     status = "error"
     active_error: BaseException | None = None
@@ -1053,7 +1055,7 @@ def run_mlx_e0(
         )
         observed_checkpoint = _resume_checkpoint(plan_identity, records, sessions)
         if resume and observed_checkpoint != expected_resume_checkpoint:
-            raise DataValidationError("E0 MLX resume checkpoint differs from external head")
+            raise DataValidationError("E0 VLLM resume checkpoint differs from external head")
         if resume:
             starts = {
                 int(row["session_index"])
@@ -1089,7 +1091,7 @@ def run_mlx_e0(
             plan_identity=plan_identity,
             details={"records_at_start": len(records), "runtime_identity": identity},
         )
-        sessions = _read_jsonl(work / "sessions.jsonl", "E0 MLX session log")
+        sessions = _read_jsonl(work / "sessions.jsonl", "E0 VLLM session log")
         _emit_checkpoint(
             plan_identity=plan_identity,
             records=records,
@@ -1130,7 +1132,7 @@ def run_mlx_e0(
             _append_jsonl(work / "records.jsonl", record)
             records.append(record)
             new_requests += 1
-            sessions = _read_jsonl(work / "sessions.jsonl", "E0 MLX session log")
+            sessions = _read_jsonl(work / "sessions.jsonl", "E0 VLLM session log")
             _emit_checkpoint(
                 plan_identity=plan_identity,
                 records=records,
@@ -1148,7 +1150,7 @@ def run_mlx_e0(
                 print(
                     json.dumps(
                         {
-                            "event": "e0-mlx-progress",
+                            "event": "e0-vllm-progress",
                             "records_completed": len(records),
                             "records_expected": _RECORDS,
                             "question_id": question.question_id,
@@ -1198,11 +1200,11 @@ def run_mlx_e0(
         prepared.model, prepared.snapshot, paths["snapshot_manifest"]
     )
     if post_snapshot != prepared.snapshot_identity and active_error is None:
-        active_error = DataValidationError("E0 MLX snapshot changed during execution")
+        active_error = DataValidationError("E0 VLLM snapshot changed during execution")
     if active_error is not None:
         raise active_error
     if plan is None or not rendered:
-        raise DataValidationError("E0 MLX ended without a frozen plan and prompts")
+        raise DataValidationError("E0 VLLM ended without a frozen plan and prompts")
     sessions = _validate_sessions(
         work / "sessions.jsonl", plan_identity=str(plan["plan_identity"])
     )
@@ -1235,7 +1237,7 @@ def run_mlx_e0(
     return result
 
 
-def verify_mlx_e0_bundle(
+def verify_vllm_e0_bundle(
     directory: str | Path,
     *,
     expected_manifest_digest: str,
@@ -1254,10 +1256,10 @@ def verify_mlx_e0_bundle(
     study_config: str | Path = "configs/experiments/phases.yaml",
     renderer_factory: Callable[[_Prepared], _Runtime] = _load_tokenizer_renderer,
 ) -> Mapping[str, Any]:
-    """Replay a completed MLX E0 bundle without loading model weights."""
+    """Replay a completed VLLM E0 bundle without loading model weights."""
 
-    _require_sha256(expected_manifest_digest, "expected E0 MLX manifest")
-    _require_sha256(expected_plan_identity, "expected E0 MLX plan")
+    _require_sha256(expected_manifest_digest, "expected E0 VLLM manifest")
+    _require_sha256(expected_plan_identity, "expected E0 VLLM plan")
     prepared = _prepare(
         cohort_directory=Path(cohort_directory).absolute(),
         reserved_source=Path(reserved_source).absolute(),
@@ -1278,7 +1280,7 @@ def verify_mlx_e0_bundle(
     finally:
         renderer.close()
     return _verify_with_prepared(
-        reject_symlink_path_components(directory, "E0 MLX bundle"),
+        reject_symlink_path_components(directory, "E0 VLLM bundle"),
         expected_manifest_digest=expected_manifest_digest,
         expected_plan_identity=expected_plan_identity,
         prepared=prepared,

@@ -1,4 +1,4 @@
-"""Resumable native-MLX operator lifecycle for the registered E7 study."""
+"""Resumable native-VLLM operator lifecycle for the registered E7 study."""
 
 from __future__ import annotations
 
@@ -34,11 +34,6 @@ from mfh.data.language_suite import load_reviewed_language_suite
 from mfh.data.source_snapshots import SOURCE_SNAPSHOTS, iter_source_questions
 from mfh.data.splits import semantic_group_ids
 from mfh.errors import ConfigurationError, DataValidationError, FrozenArtifactError
-from mfh.experiments.e3_construction import (
-    _EXPECTED_SPLIT_FINGERPRINTS,
-    _EXPECTED_T_STEER_QUESTIONS_DIGEST,
-    _questions_digest,
-)
 from mfh.experiments.e6_likelihood import (
     E6RuntimeAttestor,
     _load_e6_runtime_attestation,
@@ -69,8 +64,8 @@ from mfh.experiments.runner import (
     validate_side_effect_evaluation_bundle,
     write_side_effect_evaluation_bundle,
 )
-from mfh.inference.mlx_research import MlxResearchRuntime
 from mfh.inference.transformers_snapshot import verify_transformers_snapshot
+from mfh.inference.vllm_research import VllmResearchRuntime
 from mfh.methods.features import (
     ActivationFeatureSchema,
     ActivationKind,
@@ -333,7 +328,7 @@ class E7Runbook:
 
 
 def write_e7_runbook_template(path: str | Path, *, m1_layer: int) -> str:
-    """Write a secret-free E7 runbook for the 48-GiB Apple-MLX host."""
+    """Write a secret-free E7 runbook for the single-A100 vLLM host."""
 
     if isinstance(m1_layer, bool) or not isinstance(m1_layer, int) or not 0 <= m1_layer < 64:
         raise DataValidationError("E7 M1 layer must be an explicit Qwen layer index")
@@ -359,13 +354,13 @@ def write_e7_runbook_template(path: str | Path, *, m1_layer: int) -> str:
         "schema_version": 1,
         "phase": "E7",
         "study_protocol": "../../../../configs/experiments/phases.yaml",
-        "model_config": "../../../../configs/models/qwen3.6-27b-mlx-4bit.yaml",
+        "model_config": "../../../../configs/models/qwen3.6-27b-nvfp4.yaml",
         "prompt_config": "../../../../configs/prompts/primary.yaml",
         "snapshot_directory": (
-            "../../../models/qwen3.6-27b-mlx-4bit/"
-            "c000ac2c2057d94be3fa931000c31723aac53282"
+            "../../../models/qwen3.6-27b-nvfp4/"
+            "0893e1606ff3d5f97a441f405d5fc541a6bdf404"
         ),
-        "snapshot_manifest": "../../../../configs/models/qwen3.6-27b-mlx-4bit.snapshot.json",
+        "snapshot_manifest": "../../../../configs/models/qwen3.6-27b-nvfp4.snapshot.json",
         "environment_file": "../../../../.env",
         "execution_key_file": "../secrets/execution-private-key.hex",
         "runtime_artifact": (
@@ -548,18 +543,15 @@ def _base_context(runbook: E7Runbook) -> _E7BaseContext:
         raise FrozenArtifactError(f"cannot replay E7 reviewed split manifest: {exc}") from exc
     if (
         split_digest != stable_hash(split_body)
-        or split_digest != _EXPECTED_SPLIT_FINGERPRINTS["reviewed_split_manifest_digest"]
-        or split_body.get("review_result_manifest_digest")
-        != _EXPECTED_SPLIT_FINGERPRINTS["review_result_manifest_digest"]
         or split_body.get("scientific_eligible") is not True
         or not isinstance(split_artifacts, Mapping)
         or not isinstance(split_ids, Mapping)
-        or split_ids.get("T-steer") != _EXPECTED_SPLIT_FINGERPRINTS["t_steer_question_ids_sha256"]
+        or split_ids.get("T-steer")
+        != stable_hash([value.question_id for value in tsteer])
         or split_artifacts.get("T-steer.jsonl", {}).get("sha256")
         != sha256_file(runbook.reviewed_splits / "T-steer.jsonl")
         or split_artifacts.get("reserved.jsonl", {}).get("sha256")
         != sha256_file(runbook.reviewed_splits / "reserved.jsonl")
-        or _questions_digest(tsteer) != _EXPECTED_T_STEER_QUESTIONS_DIGEST
     ):
         raise FrozenArtifactError("E7 cohorts differ from the canonical E3 reviewed split")
     train, validation = _select_sae_questions(
@@ -587,7 +579,14 @@ def _base_context(runbook: E7Runbook) -> _E7BaseContext:
     ):
         raise DataValidationError("E7 frozen question schedules differ from registration")
     for phase, path in runbook.prerequisite_runs.items():
-        open_phase_prerequisite(path, phase=phase, study=study).verify_complete()
+        prerequisite = open_phase_prerequisite(path, phase=phase, study=study)
+        prerequisite.verify_complete()
+        if (
+            phase is ExperimentPhase.E3
+            and prerequisite.contract.input_fingerprints.get("reviewed_splits")
+            != sha256_path(runbook.reviewed_splits)
+        ):
+            raise FrozenArtifactError("E7 reviewed splits differ from completed E3")
     return _E7BaseContext(
         study=study,
         model=model,
@@ -763,7 +762,7 @@ def prepare_e7_runbook(runbook: E7Runbook) -> Mapping[str, Any]:
 
 
 def preflight_e7_runbook(runbook: E7Runbook) -> Mapping[str, Any]:
-    """Replay every immutable E7 source without loading MLX or writing outputs."""
+    """Replay every immutable E7 source without loading VLLM or writing outputs."""
 
     context = _base_context(runbook)
     status = {
@@ -792,11 +791,11 @@ def preflight_e7_runbook(runbook: E7Runbook) -> Mapping[str, Any]:
 
 def _native_runtime(
     runbook: E7Runbook, context: _E7BaseContext
-) -> tuple[MlxResearchRuntime, E6RuntimeAttestor]:
+) -> tuple[VllmResearchRuntime, E6RuntimeAttestor]:
     provenance = context.runtime_identity.get("research_provenance")
     if not isinstance(provenance, Mapping):
         raise FrozenArtifactError("E6 runtime attestation lacks research provenance")
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         context.model,
         snapshot_path=runbook.snapshot_directory,
         seed=runbook.seed,
@@ -1034,7 +1033,7 @@ def execute_e7_capture(
     budget = len(questions) if limit is None else limit
     if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
         raise DataValidationError("E7 capture limit must be positive")
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     processed = 0
     groups = semantic_group_ids(questions)
@@ -1371,7 +1370,7 @@ def execute_e7_coordinate_screen(
     budget = len(cells) * len(questions) if limit is None else limit
     if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
         raise DataValidationError("E7 coordinate limit must be positive")
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     processed = 0
     completed = 0
@@ -1842,7 +1841,7 @@ def execute_e7_causal_audit(runbook: E7Runbook, *, limit: int | None = None) -> 
     budget = expected if limit is None else limit
     if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
         raise DataValidationError("E7 causal limit must be positive")
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     grader: E7E8DevelopmentGrader | None = None
     processed = 0
@@ -2156,7 +2155,7 @@ def execute_e7_interpretability_audit(
         or budget <= 0
     ):
         raise DataValidationError("E7 interpretability schedule or limit is invalid")
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     grader: E7E8DevelopmentGrader | None = None
     processed = 0
@@ -2594,7 +2593,7 @@ def execute_e7_final(runbook: E7Runbook, *, limit: int | None = None) -> Mapping
         for values in context.final_questions.values()
         for item in values
     }
-    runtime: MlxResearchRuntime | None = None
+    runtime: VllmResearchRuntime | None = None
     attestor: E6RuntimeAttestor | None = None
     grader: E7E8DevelopmentGrader | None = None
     processed = 0
@@ -2685,7 +2684,7 @@ def finalize_e7_runbook(runbook: E7Runbook) -> Mapping[str, Any]:
 
 
 def verify_e7_runbook(runbook: E7Runbook) -> Mapping[str, Any]:
-    """Replay available E7 stages and the terminal package without loading MLX."""
+    """Replay available E7 stages and the terminal package without loading VLLM."""
 
     context = _base_context(runbook)
     selected_feature_count = 0

@@ -42,17 +42,47 @@ from mfh.experiments.e8_protected import (
 )
 from mfh.experiments.protocol import ExperimentPhase
 from mfh.experiments.runner import EvaluationCondition
-from mfh.inference.mlx_research import (
-    MlxResearchInterventionState,
-    MlxResearchRuntime,
-    MlxTeacherForcedOutput,
+from mfh.inference.vllm_research import (
+    VllmResearchInterventionState,
+    VllmResearchRuntime,
+    VllmTeacherForcedOutput,
 )
-from mfh.inference.mlx_runtime import (
-    MlxGenerationOutput,
-    MlxInterventionState,
-    MlxRenderedPrompt,
+from mfh.inference.vllm_runtime import (
+    VllmGenerationOutput,
+    VllmInterventionState,
+    VllmRenderedPrompt,
 )
 from mfh.provenance import sha256_file, sha256_path, stable_hash
+
+
+def _fake_effective_alpha(
+    state: VllmInterventionState, sequence_length: int
+) -> float:
+    """Mirror worker token-scope accounting in CPU-only runtime doubles."""
+
+    if state.prompt_tokens_remaining:
+        state.prompt_tokens_remaining = max(
+            0, state.prompt_tokens_remaining - sequence_length
+        )
+        return (
+            float(state.alpha)
+            if state.token_scope is TokenScope.FINAL_PROMPT
+            and state.prompt_tokens_remaining == 0
+            else 0.0
+        )
+    generated_index = state.generated_calls
+    state.generated_calls += sequence_length
+    if state.token_scope is TokenScope.FIRST_GENERATED:
+        return float(state.alpha) if generated_index == 0 else 0.0
+    if state.token_scope is TokenScope.FIRST_FOUR:
+        return float(state.alpha) if generated_index < 4 else 0.0
+    if state.token_scope is TokenScope.FIRST_EIGHT:
+        return float(state.alpha) if generated_index < 8 else 0.0
+    if state.token_scope is TokenScope.ALL_GENERATED:
+        return float(state.alpha)
+    if state.token_scope is TokenScope.EXPONENTIAL_DECAY:
+        return float(state.alpha) * math.exp(-float(state.decay) * generated_index)
+    return 0.0
 
 _EXECUTION_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 _EXECUTION_PUBLIC_KEY = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
@@ -78,7 +108,7 @@ def _token_digest(token_ids: Sequence[int]) -> str:
 class _LikelihoodRuntime:
     def __init__(self, losses: Mapping[str, tuple[float, ...]]) -> None:
         self.losses = dict(losses)
-        self.states: list[MlxInterventionState] = []
+        self.states: list[VllmInterventionState] = []
         self.render_calls = 0
 
     def render_prompt(
@@ -87,10 +117,10 @@ class _LikelihoodRuntime:
         question: str,
         *,
         metadata: Mapping[str, object] | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         self.render_calls += 1
         text = f"{prompt.text}\n{question}"
-        return MlxRenderedPrompt(
+        return VllmRenderedPrompt(
             text=text,
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             token_ids=(1, 2),
@@ -100,19 +130,19 @@ class _LikelihoodRuntime:
 
     def teacher_forced_continuation(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         site: ActivationSite,
-        intervention_states: Mapping[int, MlxInterventionState] | None = None,
-    ) -> MlxTeacherForcedOutput:
+        intervention_states: Mapping[int, VllmInterventionState] | None = None,
+    ) -> VllmTeacherForcedOutput:
         assert rendered.token_ids == (1, 2)
-        assert tuple(layers) == (16,)
+        assert tuple(layers) == (31,)
         assert site is ActivationSite.POST_MLP
         if intervention_states is not None:
-            state = intervention_states[16]
-            assert isinstance(state, MlxResearchInterventionState)
+            state = intervention_states[31]
+            assert isinstance(state, VllmResearchInterventionState)
             self.states.append(state)
         log_probabilities = tuple(-value for value in self.losses[response])
         token_ids = tuple(range(10, 10 + len(log_probabilities)))
@@ -121,11 +151,11 @@ class _LikelihoodRuntime:
         if intervention_states is not None:
             state.arm_prompt(len(rendered.token_ids))
             for sequence_length in (len(rendered.token_ids), *([1] * len(token_ids))):
-                effective_alpha = state.effective_alpha(sequence_length)
+                effective_alpha = _fake_effective_alpha(state, sequence_length)
                 state.captured = np.ones((1, sequence_length, 2), dtype=np.float32)
                 state.intervened = state.captured + effective_alpha
                 state.applications += int(effective_alpha != 0)
-        return MlxTeacherForcedOutput(
+        return VllmTeacherForcedOutput(
             response_text_sha256=hashlib.sha256(response.encode()).hexdigest(),
             response_token_ids=token_ids,
             response_token_ids_sha256=_token_digest(token_ids),
@@ -133,7 +163,7 @@ class _LikelihoodRuntime:
             negative_log_likelihood=nll,
             mean_negative_log_likelihood=mean_nll,
             perplexity=math.exp(mean_nll),
-            activations={16: np.ones((len(token_ids), 2), dtype=np.float32)},
+            activations={31: np.ones((len(token_ids), 2), dtype=np.float32)},
         )
 
 
@@ -142,35 +172,50 @@ class _IntegratedBase(_LikelihoodRuntime):
         super().__init__({"gold": (0.3,), "I don't know.": (0.6,)})
         self.snapshot = snapshot
         self.model_spec = ModelSpec(
-            name="qwen3.6-27b-mlx-4bit",
-            repository="mlx-community/Qwen3.6-27B-4bit",
-            revision="c000ac2c2057d94be3fa931000c31723aac53282",
-            runtime=Runtime.MLX,
-            quantization="affine-g64-mlx-4bit",
+            name="qwen3.6-27b-nvfp4",
+            repository="nvidia/Qwen3.6-27B-NVFP4",
+            revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+            runtime=Runtime.VLLM,
+            quantization="modelopt-mixed-nvfp4-fp8",
             num_layers=64,
         )
 
     def runtime_identity(self) -> Mapping[str, object]:
         return {
-            "backend": "mlx",
-            "mlx": "test",
-            "mlx_lm": "test",
+            "backend": "vllm",
+            "vllm": "0.24.0",
+            "transformers": "5.2.0",
+            "torch": "2.11.0",
             "python": "test",
-            "machine_model": "test",
-            "chip": "test",
-            "unified_memory_bytes": 1,
-            "physical_cpu_cores": 1,
-            "architecture": "arm64",
-            "os": "macOS test",
-            "os_build": "test",
-            "model_class": "test.Model",
+            "architecture": "x86_64",
+            "os": "Linux test",
+            "nvidia_driver": "570.00",
+            "gpu_name": "NVIDIA A100-SXM4-40GB",
+            "gpu_total_memory_bytes": 40_000_000_000,
+            "cuda_capability": "8.0",
+            "cuda_runtime": "12.9",
+            "tensor_parallel_size": 1,
+            "quantization_loader": "modelopt_mixed",
+            "quantization_config_class": (
+                "vllm.model_executor.layers.quantization.modelopt."
+                "ModelOptMixedPrecisionConfig"
+            ),
+            "quantization_execution": "marlin-w4a16-fp8-weight-only-on-sm80",
+            "model_class": (
+                "vllm.model_executor.models.qwen3_5."
+                "Qwen3_5ForConditionalGeneration"
+            ),
             "tokenizer_class": "test.Tokenizer",
             "num_layers": 64,
+            "hidden_size": 5_120,
             "seed": 17,
             "research_provenance": {"fixture": "integrated"},
             "research_toolchain": {
-                "xcodebuild": "test",
-                "metal_compiler": "test",
+                "vllm": "0.24.0",
+                "torch": "2.11.0",
+                "transformers": "5.2.0",
+                "numpy": "2.4.3",
+                "nvidia_driver": "570.00",
             },
         }
 
@@ -233,11 +278,11 @@ def test_e6_scores_best_alias_abstention_and_rank_with_fresh_states() -> None:
     )
     factory_calls = 0
 
-    def state_factory() -> Mapping[int, MlxInterventionState]:
+    def state_factory() -> Mapping[int, VllmInterventionState]:
         nonlocal factory_calls
         factory_calls += 1
         return {
-            16: MlxResearchInterventionState(
+            31: VllmResearchInterventionState(
                 direction=np.array([1.0, 0.0], dtype=np.float32),
                 alpha=0.5,
             )
@@ -260,7 +305,7 @@ def test_e6_scores_best_alias_abstention_and_rank_with_fresh_states() -> None:
         prompt=PromptSpec("P2-calibrated-abstention", "Answer or abstain."),
         method="M3",
         condition_id="a" * 64,
-        layers=(16,),
+        layers=(31,),
         site=ActivationSite.POST_MLP,
         state_factory=state_factory,
     )
@@ -305,7 +350,7 @@ def test_e6_rejects_unbound_condition_and_method_state_mismatch() -> None:
             prompt=prompt,
             method="M0",
             condition_id="not-a-digest",
-            layers=(16,),
+            layers=(31,),
             site=ActivationSite.POST_MLP,
         )
 
@@ -326,11 +371,11 @@ def test_e6_signed_binding_rejects_runtime_receipt_tampering() -> None:
         phase=ExperimentPhase.E6,
         benchmark="triviaqa",
         partition="T-dev",
-        model_name="qwen3.6-27b-mlx-4bit",
-        model_repository="mlx-community/Qwen3.6-27B-4bit",
-        model_revision="c000ac2c2057d94be3fa931000c31723aac53282",
-        runtime=Runtime.MLX,
-        quantization="affine-g64-mlx-4bit",
+        model_name="qwen3.6-27b-nvfp4",
+        model_repository="nvidia/Qwen3.6-27B-NVFP4",
+        model_revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+        runtime=Runtime.VLLM,
+        quantization="modelopt-mixed-nvfp4-fp8",
         model_num_layers=64,
         system_prompt_id=prompt.prompt_id,
         prompt_template_sha256=hashlib.sha256(prompt.text.encode()).hexdigest(),
@@ -350,7 +395,7 @@ def test_e6_signed_binding_rejects_runtime_receipt_tampering() -> None:
         prompt=prompt,
         method="M0",
         condition_id=condition.condition_id,
-        layers=(16,),
+        layers=(31,),
         site=ActivationSite.POST_MLP,
     )
     runtime_sha = "2" * 64
@@ -455,7 +500,7 @@ def test_e6_signed_binding_rejects_runtime_receipt_tampering() -> None:
             prompt=prompt,
             method="M1",
             condition_id="a" * 64,
-            layers=(16,),
+            layers=(31,),
             site=ActivationSite.POST_MLP,
         )
 
@@ -463,22 +508,22 @@ def test_e6_signed_binding_rejects_runtime_receipt_tampering() -> None:
 def test_e6_rejects_zero_alpha_declared_intervention_before_scoring() -> None:
     runtime = _LikelihoodRuntime({"gold": (0.3,), "I don't know.": (0.6,)})
 
-    def zero_state() -> Mapping[int, MlxInterventionState]:
+    def zero_state() -> Mapping[int, VllmInterventionState]:
         return {
-            16: MlxResearchInterventionState(
+            31: VllmResearchInterventionState(
                 direction=np.array([1.0, 0.0], dtype=np.float32),
                 alpha=0.0,
             )
         }
 
-    with pytest.raises(DataValidationError, match="material MLX state"):
+    with pytest.raises(DataValidationError, match="material VLLM state"):
         score_e6_question(
             runtime=runtime,
             question=Question("q-1", "triviaqa", "Question?", ("gold",)),
             prompt=PromptSpec("P0-neutral", "Answer."),
             method="M1",
             condition_id="a" * 64,
-            layers=(16,),
+            layers=(31,),
             site=ActivationSite.POST_MLP,
             state_factory=zero_state,
         )
@@ -491,7 +536,7 @@ def test_integrated_e6_executor_owns_runtime_attestation_and_enriches_row(
     snapshot.mkdir()
     (snapshot / "weights.safetensors").write_bytes(b"frozen")
     base = _IntegratedBase(snapshot)
-    runtime = MlxResearchRuntime(base)  # type: ignore[arg-type]
+    runtime = VllmResearchRuntime(base)  # type: ignore[arg-type]
     monkeypatch.setattr(
         runtime,
         "teacher_forced_continuation",
@@ -499,20 +544,20 @@ def test_integrated_e6_executor_owns_runtime_attestation_and_enriches_row(
     )
 
     def generate_with_interventions(
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[
-            tuple[int, ActivationSite], MlxInterventionState
+            tuple[int, ActivationSite], VllmInterventionState
         ],
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 32
         if intervention_states:
-            state = intervention_states[(16, ActivationSite.POST_MLP)]
-            assert isinstance(state, MlxResearchInterventionState)
+            state = intervention_states[(31, ActivationSite.POST_MLP)]
+            assert isinstance(state, VllmResearchInterventionState)
             state.arm_prompt(len(rendered.token_ids))
-            state.effective_alpha(len(rendered.token_ids))
-            effective_alpha = state.effective_alpha(1)
+            _fake_effective_alpha(state, len(rendered.token_ids))
+            effective_alpha = _fake_effective_alpha(state, 1)
             state.captured = np.ones(
                 (1, 1, int(np.asarray(state.direction).size)), dtype=np.float32
             )
@@ -520,7 +565,7 @@ def test_integrated_e6_executor_owns_runtime_attestation_and_enriches_row(
                 state.direction, dtype=np.float32
             )
             state.applications += int(effective_alpha != 0)
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(10,),
             text="gold",
@@ -560,7 +605,7 @@ def test_integrated_e6_executor_owns_runtime_attestation_and_enriches_row(
         model_name=base.model_spec.name,
         model_repository=base.model_spec.repository,
         model_revision=base.model_spec.revision,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=base.model_spec.quantization,
         model_num_layers=base.model_spec.num_layers,
         system_prompt_id=prompt.prompt_id,
@@ -613,7 +658,7 @@ def test_integrated_e6_executor_owns_runtime_attestation_and_enriches_row(
         prompt=prompt,
         generation_record=unbound,
         condition=condition,
-        layers=(16,),
+        layers=(31,),
         site=ActivationSite.POST_MLP,
         state_factory=None,
         question_bundle_sha256="3" * 64,
@@ -631,7 +676,7 @@ def test_integrated_e6_executor_owns_runtime_attestation_and_enriches_row(
     assert executed.generation_record.metadata["e6_runtime_artifact_sha256"] == runtime_sha
     assert executed.generation_record.metadata["generation_runtime_metrics"] == {
         "schema_version": 1,
-        "unified_memory_bytes": 1,
+            "gpu_total_memory_bytes": 40_000_000_000,
         "peak_memory_bytes": 1,
         "generation_peak_memory_bytes": 1,
         "auxiliary_peak_memory_bytes": 0,
@@ -660,7 +705,7 @@ def test_integrated_e6_executor_owns_runtime_attestation_and_enriches_row(
             prompt=prompt,
             generation_record=executed.generation_record,
             condition=condition,
-            layers=(16,),
+            layers=(31,),
             site=ActivationSite.POST_MLP,
             state_factory=None,
             question_bundle_sha256="3" * 64,
@@ -676,7 +721,7 @@ def test_integrated_e6_m1_signs_material_generation_and_exact_e3_slice(
     e3_path = tmp_path / "e3-vectors"
     e3_sha, direction_sha = _write_e3_vectors(e3_path)
     base = _IntegratedBase(snapshot)
-    runtime = MlxResearchRuntime(base)  # type: ignore[arg-type]
+    runtime = VllmResearchRuntime(base)  # type: ignore[arg-type]
     monkeypatch.setattr(
         runtime,
         "teacher_forced_continuation",
@@ -684,25 +729,25 @@ def test_integrated_e6_m1_signs_material_generation_and_exact_e3_slice(
     )
 
     def generate_with_interventions(
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[
-            tuple[int, ActivationSite], MlxInterventionState
+            tuple[int, ActivationSite], VllmInterventionState
         ],
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 32
-        state = intervention_states[(16, ActivationSite.POST_MLP)]
-        assert isinstance(state, MlxResearchInterventionState)
+        state = intervention_states[(31, ActivationSite.POST_MLP)]
+        assert isinstance(state, VllmResearchInterventionState)
         state.arm_prompt(len(rendered.token_ids))
-        state.effective_alpha(len(rendered.token_ids))
-        effective_alpha = state.effective_alpha(1)
+        _fake_effective_alpha(state, len(rendered.token_ids))
+        effective_alpha = _fake_effective_alpha(state, 1)
         state.captured = np.ones((1, 1, 2), dtype=np.float32)
         state.intervened = state.captured + effective_alpha * np.array(
             [1.0, 0.0], dtype=np.float32
         )
         state.applications += int(effective_alpha != 0)
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(10,),
             text="gold",
@@ -729,7 +774,7 @@ def test_integrated_e6_m1_signs_material_generation_and_exact_e3_slice(
     )
     runtime_artifact = tmp_path / "runtime-attestation.json"
     attestor.write_runtime_artifact(runtime_artifact)
-    tensor_index = ["P0-neutral", "M1-R", "post_mlp", 16]
+    tensor_index = ["P0-neutral", "M1-R", "post_mlp", 31]
     method_artifact = e6_e3_slice_digest(
         e3_static_vectors_sha256=e3_sha,
         tensor_index=tensor_index,
@@ -745,14 +790,14 @@ def test_integrated_e6_m1_signs_material_generation_and_exact_e3_slice(
         model_name=base.model_spec.name,
         model_repository=base.model_spec.repository,
         model_revision=base.model_spec.revision,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=base.model_spec.quantization,
         model_num_layers=base.model_spec.num_layers,
         system_prompt_id=prompt.prompt_id,
         prompt_template_sha256=hashlib.sha256(prompt.text.encode()).hexdigest(),
         steering_method="M1",
         method_artifact_sha256=method_artifact,
-        layer=16,
+        layer=31,
         site=ActivationSite.POST_MLP,
         token_scope=TokenScope.FIRST_FOUR,
         alpha=0.5,
@@ -770,7 +815,7 @@ def test_integrated_e6_m1_signs_material_generation_and_exact_e3_slice(
         system_prompt_id=condition.system_prompt_id,
         rendered_prompt_hash=rendered.sha256,
         steering_method="M1",
-        layer=16,
+        layer=31,
         site=ActivationSite.POST_MLP,
         token_scope=TokenScope.FIRST_FOUR,
         alpha=0.5,
@@ -793,9 +838,9 @@ def test_integrated_e6_m1_signs_material_generation_and_exact_e3_slice(
         },
     )
 
-    def state_factory() -> Mapping[int, MlxInterventionState]:
+    def state_factory() -> Mapping[int, VllmInterventionState]:
         return {
-            16: MlxResearchInterventionState(
+            31: VllmResearchInterventionState(
                 direction=np.array([1.0, 0.0], dtype=np.float32),
                 alpha=0.5,
                 token_scope=TokenScope.FIRST_FOUR,
@@ -810,7 +855,7 @@ def test_integrated_e6_m1_signs_material_generation_and_exact_e3_slice(
         prompt=prompt,
         generation_record=generation,
         condition=condition,
-        layers=(16,),
+        layers=(31,),
         site=ActivationSite.POST_MLP,
         state_factory=state_factory,
         question_bundle_sha256="8" * 64,
@@ -828,11 +873,11 @@ def test_integrated_e6_m1_signs_material_generation_and_exact_e3_slice(
             prompt=prompt,
             generation_record=generation,
             condition=condition,
-            layers=(16,),
+            layers=(31,),
             site=ActivationSite.POST_MLP,
             state_factory=state_factory,
             question_bundle_sha256="8" * 64,
-            e3_tensor_index=["P0-neutral", "M1-P", "post_mlp", 16],
+            e3_tensor_index=["P0-neutral", "M1-P", "post_mlp", 31],
         )
 
 
@@ -843,7 +888,7 @@ def test_integrated_e8_fixed_executor_signs_material_native_edit(
     snapshot.mkdir()
     (snapshot / "weights.safetensors").write_bytes(b"frozen")
     base = _IntegratedBase(snapshot)
-    runtime = MlxResearchRuntime(base)  # type: ignore[arg-type]
+    runtime = VllmResearchRuntime(base)  # type: ignore[arg-type]
 
     def standardized_intervention_state(
         direction: np.ndarray,
@@ -851,8 +896,8 @@ def test_integrated_e8_fixed_executor_signs_material_native_edit(
         standardized_alpha: float,
         reference_rms: float,
         token_scope: TokenScope,
-    ) -> MlxResearchInterventionState:
-        return MlxResearchInterventionState(
+    ) -> VllmResearchInterventionState:
+        return VllmResearchInterventionState(
             direction=direction,
             alpha=standardized_alpha * reference_rms,
             token_scope=token_scope,
@@ -863,25 +908,25 @@ def test_integrated_e8_fixed_executor_signs_material_native_edit(
     )
 
     def generate_with_interventions(
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[
-            tuple[int, ActivationSite], MlxInterventionState
+            tuple[int, ActivationSite], VllmInterventionState
         ],
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 32
-        state = intervention_states[(16, ActivationSite.POST_MLP)]
-        assert isinstance(state, MlxResearchInterventionState)
+        state = intervention_states[(31, ActivationSite.POST_MLP)]
+        assert isinstance(state, VllmResearchInterventionState)
         state.arm_prompt(len(rendered.token_ids))
-        state.effective_alpha(len(rendered.token_ids))
-        effective_alpha = state.effective_alpha(1)
+        _fake_effective_alpha(state, len(rendered.token_ids))
+        effective_alpha = _fake_effective_alpha(state, 1)
         state.captured = np.ones((1, 1, 2), dtype=np.float32)
         state.intervened = state.captured + effective_alpha * np.array(
             [1.0, 0.0], dtype=np.float32
         )
         state.applications += int(effective_alpha != 0)
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(10,),
             text="gold",
@@ -911,14 +956,14 @@ def test_integrated_e8_fixed_executor_signs_material_native_edit(
         model_name=base.model_spec.name,
         model_repository=base.model_spec.repository,
         model_revision=base.model_spec.revision,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=base.model_spec.quantization,
         model_num_layers=base.model_spec.num_layers,
         system_prompt_id=prompt.prompt_id,
         prompt_template_sha256=hashlib.sha256(prompt.text.encode()).hexdigest(),
         steering_method="M5",
         method_artifact_sha256="5" * 64,
-        layer=16,
+        layer=31,
         site=ActivationSite.POST_MLP,
         token_scope=TokenScope.FIRST_FOUR,
         alpha=0.5,
@@ -936,7 +981,7 @@ def test_integrated_e8_fixed_executor_signs_material_native_edit(
         system_prompt_id=condition.system_prompt_id,
         rendered_prompt_hash=rendered.sha256,
         steering_method="M5",
-        layer=16,
+        layer=31,
         site=ActivationSite.POST_MLP,
         token_scope=TokenScope.FIRST_FOUR,
         alpha=0.5,
@@ -960,6 +1005,7 @@ def test_integrated_e8_fixed_executor_signs_material_native_edit(
     )
     raw_direction = np.random.default_rng(17).standard_normal(5_120).astype(np.float32)
     direction = np.ascontiguousarray(raw_direction / np.linalg.norm(raw_direction))
+    direction = np.ascontiguousarray(direction * np.float32(1.000001))
     renormalized = np.ascontiguousarray(direction / np.linalg.norm(direction))
     assert direction.tobytes() != renormalized.tobytes()
     executed = execute_e8_generation(
@@ -975,7 +1021,7 @@ def test_integrated_e8_fixed_executor_signs_material_native_edit(
     facts = {
         "steering_method": "M5",
         "method_artifact_sha256": condition.method_artifact_sha256,
-        "layer": 16,
+        "layer": 31,
         "site": ActivationSite.POST_MLP.value,
         "token_scope": TokenScope.FIRST_FOUR.value,
         "alpha": 0.5,
@@ -1038,19 +1084,19 @@ def test_e8_executor_measures_native_teacher_forced_wikitext_nll(
     snapshot.mkdir()
     (snapshot / "weights.safetensors").write_bytes(b"frozen")
     base = _IntegratedBase(snapshot)
-    runtime = MlxResearchRuntime(base)  # type: ignore[arg-type]
+    runtime = VllmResearchRuntime(base)  # type: ignore[arg-type]
 
     def generate_with_interventions(
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: Mapping[
-            tuple[int, ActivationSite], MlxInterventionState
+            tuple[int, ActivationSite], VllmInterventionState
         ],
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 32
         assert not intervention_states
-        return MlxGenerationOutput(
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(10,),
             text="generated continuation",
@@ -1067,20 +1113,20 @@ def test_e8_executor_measures_native_teacher_forced_wikitext_nll(
         )
 
     def teacher_forced_continuation(
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         response: str,
         *,
         layers: Sequence[int],
         site: ActivationSite,
-        intervention_states: Mapping[int, MlxInterventionState] | None = None,
-    ) -> MlxTeacherForcedOutput:
+        intervention_states: Mapping[int, VllmInterventionState] | None = None,
+    ) -> VllmTeacherForcedOutput:
         assert response == "A frozen WikiText continuation."
         assert tuple(layers) == (0,)
         assert site is ActivationSite.POST_MLP
         assert not intervention_states
         token_ids = (21, 22)
         log_probabilities = (-0.2, -0.4)
-        return MlxTeacherForcedOutput(
+        return VllmTeacherForcedOutput(
             response_text_sha256=hashlib.sha256(response.encode()).hexdigest(),
             response_token_ids=token_ids,
             response_token_ids_sha256=_token_digest(token_ids),
@@ -1113,7 +1159,7 @@ def test_e8_executor_measures_native_teacher_forced_wikitext_nll(
         model_name=base.model_spec.name,
         model_repository=base.model_spec.repository,
         model_revision=base.model_spec.revision,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=base.model_spec.quantization,
         model_num_layers=base.model_spec.num_layers,
         system_prompt_id=prompt.prompt_id,

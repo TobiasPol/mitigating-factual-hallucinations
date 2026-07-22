@@ -15,7 +15,7 @@ from mfh.contracts import ModelSpec, Outcome, PromptSpec, Question, Runtime
 from mfh.data.io import read_questions
 from mfh.data.reviewed_splits import validate_reviewed_split_snapshot
 from mfh.errors import ConfigurationError, DataValidationError, FrozenArtifactError
-from mfh.experiments.e1_mlx import verify_e1_output_bundle
+from mfh.experiments.e1_vllm import verify_e1_output_bundle
 from mfh.experiments.e2_capture import (
     E1P0Source,
     prepare_e2_capture_work,
@@ -41,16 +41,15 @@ from mfh.experiments.model_selection import (
     validate_active_study_artifact_paths,
 )
 from mfh.experiments.runner import PhaseCompletion, PhaseFalsification
-from mfh.inference.mlx_preflight import validate_mlx_preflight_receipt
-from mfh.inference.mlx_research import (
-    MlxResearchRuntime,
-    mlx_research_toolchain_identity,
-)
 from mfh.inference.transformers_snapshot import verify_transformers_snapshot
+from mfh.inference.vllm_preflight import validate_vllm_preflight_receipt
+from mfh.inference.vllm_research import (
+    VllmResearchRuntime,
+    vllm_research_toolchain_identity,
+)
 from mfh.provenance import sha256_file, sha256_path, stable_hash
 
-_MODEL_CLASS = "mlx_lm.models.qwen3_5.Model"
-_TOKENIZER_CLASS = "mlx_lm.tokenizer_utils.TokenizerWrapper"
+_MODEL_CLASS = "vllm.model_executor.models.qwen3_5.Qwen3_5ForConditionalGeneration"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,11 +81,11 @@ def _runtime_identity_from_receipt(receipt: Mapping[str, Any]) -> Mapping[str, A
     if (
         not isinstance(identity, Mapping)
         or identity.get("model_class") != _MODEL_CLASS
-        or identity.get("tokenizer_class") != _TOKENIZER_CLASS
+        or not isinstance(identity.get("tokenizer_class"), str)
         or identity.get("num_layers") != 64
         or identity.get("seed") != 17
     ):
-        raise DataValidationError("MLX preflight receipt runtime identity differs")
+        raise DataValidationError("VLLM preflight receipt runtime identity differs")
     return MappingProxyType(dict(identity))
 
 
@@ -208,8 +207,8 @@ def _prepare_live_inputs(
     controller, dev, simpleqa, aa, questions = _load_questions(splits_directory)
     model = load_model_spec(model_config)
     validate_active_model_spec(model)
-    if model.runtime is not Runtime.MLX or model.num_layers != 64:
-        raise ConfigurationError("E2 requires the sole 64-layer MLX model")
+    if model.runtime is not Runtime.VLLM or model.num_layers != 64:
+        raise ConfigurationError("E2 requires the sole 64-layer vLLM model")
     snapshot = verify_transformers_snapshot(
         model, snapshot_directory, snapshot_manifest
     )
@@ -250,7 +249,7 @@ def _prepare_live_inputs(
         "project_lock": sha256_file(project_root / "uv.lock"),
         "project_metadata": sha256_file(project_root / "pyproject.toml"),
     }
-    receipt = validate_mlx_preflight_receipt(
+    receipt = validate_vllm_preflight_receipt(
         runtime_config,
         project_root=project_root,
         model_config=model_config,
@@ -262,10 +261,10 @@ def _prepare_live_inputs(
     if not isinstance(software, Mapping) or not isinstance(
         software.get("toolchain"), Mapping
     ):
-        raise DataValidationError("MLX preflight receipt software/toolchain differs")
-    live_toolchain = dict(mlx_research_toolchain_identity())
+        raise DataValidationError("VLLM preflight receipt software/toolchain differs")
+    live_toolchain = dict(vllm_research_toolchain_identity())
     if live_toolchain != software.get("toolchain"):
-        raise DataValidationError("live MLX research toolchain differs from preflight")
+        raise DataValidationError("live VLLM research toolchain differs from preflight")
     research_provenance = {
         "schema_version": 3,
         "model_repository": model.repository,
@@ -393,7 +392,7 @@ def _prepared(
     )
 
 
-def prepare_e2_mlx(
+def prepare_e2_vllm(
     *,
     workspace_directory: str | Path,
     capture_work_directory: str | Path,
@@ -492,13 +491,13 @@ def prepare_e2_mlx(
     )
 
 
-def run_e2_mlx_capture(
+def run_e2_vllm_capture(
     *,
     request_budget: int | None = None,
     **inputs: Any,
 ) -> Mapping[str, Any]:
     prepared = _prepared(**inputs)
-    runtime = MlxResearchRuntime.from_spec(
+    runtime = VllmResearchRuntime.from_spec(
         prepared.model,
         snapshot_path=prepared.snapshot,
         seed=17,
@@ -518,7 +517,7 @@ def run_e2_mlx_capture(
         runtime.close()
 
 
-def verify_e2_mlx_capture(
+def verify_e2_vllm_capture(
     *,
     require_complete: bool = False,
     **inputs: Any,
@@ -534,7 +533,7 @@ def verify_e2_mlx_capture(
     )
 
 
-def fit_e2_mlx_probes(
+def fit_e2_vllm_probes(
     output_directory: str | Path,
     *,
     protocol: E2ProbeProtocol | None = None,
@@ -568,7 +567,7 @@ def fit_e2_mlx_probes(
     )
 
 
-def finalize_e2_mlx_phase(
+def finalize_e2_vllm_phase(
     output_directory: str | Path,
     *,
     probe_bundle_directory: str | Path,

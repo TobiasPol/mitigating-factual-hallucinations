@@ -225,11 +225,11 @@ def _partition_rows(
     prompt_id: str,
     view: E2FeatureView,
     verified_store: VerifiedActivationStore | None = None,
-) -> tuple[tuple[ActivationCaptureRow, ...], np.ndarray]:
+) -> tuple[tuple[ActivationCaptureRow, ...], np.ndarray[Any, Any]]:
     site_index = workspace.activation_spec.sites.index(view.site)
     layer_index = workspace.activation_spec.layers.index(view.layer)
     selected_rows: list[ActivationCaptureRow] = []
-    selected_values: list[np.ndarray] = []
+    selected_values: list[np.ndarray[Any, Any]] = []
     sequence = 0
     for rows, activations in iter_activation_shards(
         workspace.directory / "activations",
@@ -286,7 +286,7 @@ def build_e2_probe_dataset(
         split_manifest_digest=split_manifest_digest,
         model_repository=workspace.activation_spec.model_repository,
         model_revision=workspace.activation_spec.model_revision,
-        runtime=Runtime.MLX,
+        runtime=Runtime.VLLM,
         quantization=workspace.activation_spec.quantization,
         prompt_id=prompt_id,
         prompt_sha256=prompt_template_sha256,
@@ -332,7 +332,7 @@ def _build_e2_view_datasets(
     selected_rows: dict[tuple[str, str], list[ActivationCaptureRow]] = {
         key: [] for key in expected_keys
     }
-    selected_values: dict[tuple[str, str], list[np.ndarray]] = {
+    selected_values: dict[tuple[str, str], list[np.ndarray[Any, Any]]] = {
         key: [] for key in expected_keys
     }
     sequence = 0
@@ -378,7 +378,7 @@ def _build_e2_view_datasets(
             split_manifest_digest=split_manifest_digest,
             model_repository=workspace.activation_spec.model_repository,
             model_revision=workspace.activation_spec.model_revision,
-            runtime=Runtime.MLX,
+            runtime=Runtime.VLLM,
             quantization=workspace.activation_spec.quantization,
             prompt_id=prompt_id,
             prompt_sha256=prompt_template_sha256[prompt_id],

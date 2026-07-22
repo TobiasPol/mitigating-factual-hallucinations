@@ -25,7 +25,7 @@ from mfh.provenance import sha256_file, sha256_path, stable_hash
 
 
 def _probe_bundle(root: Path) -> VerifiedE2ProbeBundle:
-    view = E2FeatureView(16, ActivationSite.POST_MLP)
+    view = E2FeatureView(31, ActivationSite.POST_MLP)
     rows: list[dict[str, object]] = []
     scores = {
         (ProbeTask.CORRECT_INCORRECT_ABSTENTION, ProbeKind.LOGISTIC): (0.70, 0.80),
@@ -88,10 +88,10 @@ def _record() -> GenerationRecord:
     return GenerationRecord(
         question_id="q-1",
         benchmark="triviaqa",
-        model_repository="mlx-community/Qwen3.6-27B-4bit",
-        model_revision="c000ac2c2057d94be3fa931000c31723aac53282",
-        runtime=Runtime.MLX,
-        quantization="affine-g64-mlx-4bit",
+        model_repository="nvidia/Qwen3.6-27B-NVFP4",
+        model_revision="0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+        runtime=Runtime.VLLM,
+        quantization="modelopt-mixed-nvfp4-fp8",
         system_prompt_id="P0-neutral",
         rendered_prompt_hash="a" * 64,
         steering_method="probe-logistic",

@@ -28,14 +28,14 @@ def test_approved_qwen_model_selection_is_bound_to_exact_config_and_policy() -> 
     amendment = load_model_selection_amendment(AMENDMENT, model_config_directory=MODELS)
 
     assert amendment["amendment_digest"] == (
-        "fc26c55c864156a296d030dcd4624885f21d933075979a1891985cf6f252a7a7"
+        "8eae69a6fa1435ceb7a67b238d8f42772d782fad60e94adf01d1d69f6a1563c7"
     )
-    assert [row["name"] for row in amendment["active_models"]] == ["qwen3.6-27b-mlx-4bit"]
+    assert [row["name"] for row in amendment["active_models"]] == ["qwen3.6-27b-nvfp4"]
 
 
 def test_model_selection_rejects_body_tampering(tmp_path: Path) -> None:
     raw = json.loads(AMENDMENT.read_text(encoding="utf-8"))
-    raw["hardware_envelope"]["unified_memory_bytes"] = 1
+    raw["hardware_envelope"]["minimum_vram_bytes"] = 1
     candidate = tmp_path / "amendment.json"
     candidate.write_text(json.dumps(raw), encoding="utf-8")
 
@@ -46,11 +46,11 @@ def test_model_selection_rejects_body_tampering(tmp_path: Path) -> None:
 def test_model_selection_rejects_semantic_model_config_drift(tmp_path: Path) -> None:
     model_directory = tmp_path / "models"
     shutil.copytree(MODELS, model_directory)
-    candidate = model_directory / "qwen3.6-27b-mlx-4bit.yaml"
+    candidate = model_directory / "qwen3.6-27b-nvfp4.yaml"
     text = candidate.read_text(encoding="utf-8")
     candidate.write_text(
         text.replace(
-            "quantization: affine-g64-mlx-4bit",
+            "quantization: modelopt-mixed-nvfp4-fp8",
             "quantization: fabricated",
         ),
         encoding="utf-8",
@@ -108,9 +108,9 @@ def test_active_study_paths_reject_namespace_and_nested_symlinks(
 
 
 def test_phase_ledger_factories_reject_outside_active_namespace(tmp_path: Path) -> None:
-    with pytest.raises(ConfigurationError, match="qwen36-27b-mlx4-m4max48-v1"):
+    with pytest.raises(ConfigurationError, match="qwen36-27b-nvfp4-a10040-v1"):
         PhaseRunLedger.open(tmp_path / "copied-E0", study=object())  # type: ignore[arg-type]
-    with pytest.raises(ConfigurationError, match="qwen36-27b-mlx4-m4max48-v1"):
+    with pytest.raises(ConfigurationError, match="qwen36-27b-nvfp4-a10040-v1"):
         PhaseRunLedger.create(
             tmp_path / "new-E0",
             object(),  # type: ignore[arg-type]
@@ -123,12 +123,12 @@ def test_phase_ledger_factories_reject_outside_active_namespace(tmp_path: Path) 
 def test_e5_verifiers_reject_copied_artifacts_outside_active_namespace(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ConfigurationError, match="qwen36-27b-mlx4-m4max48-v1"):
+    with pytest.raises(ConfigurationError, match="qwen36-27b-nvfp4-a10040-v1"):
         verify_e5_native_ablation(
             tmp_path / "copied-native",
             expected_execution_public_key="0" * 64,
         )
-    with pytest.raises(ConfigurationError, match="qwen36-27b-mlx4-m4max48-v1"):
+    with pytest.raises(ConfigurationError, match="qwen36-27b-nvfp4-a10040-v1"):
         verify_signed_e5_selection(
             tmp_path / "copied-selection",
             native_directory=tmp_path / "copied-native",
@@ -156,5 +156,5 @@ def test_qwen_model_selection_requires_no_legacy_artifacts(tmp_path: Path) -> No
     models = project / "configs/models"
     loaded = load_model_selection_amendment(amendment, model_config_directory=models)
 
-    assert loaded["active_models"][0]["name"] == "qwen3.6-27b-mlx-4bit"
+    assert loaded["active_models"][0]["name"] == "qwen3.6-27b-nvfp4"
     assert not (project / "artifacts").exists()

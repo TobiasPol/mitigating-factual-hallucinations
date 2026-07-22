@@ -7,25 +7,25 @@ from mfh.inference.hooks import (
     InterventionPlan,
     PassPhase,
 )
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxPromptFeatureOutput,
-    MlxResearchInterventionState,
-    MlxResearchRuntime,
-    MlxTeacherForcedOutput,
-)
-from mfh.inference.mlx_runtime import (
-    MlxGenerationOutput,
-    MlxInterventionState,
-    MlxRenderedPrompt,
-    MlxRuntime,
-)
 from mfh.inference.transformers_snapshot import (
     SnapshotFile,
     SnapshotManifest,
     load_snapshot_manifest,
     reject_symlink_path_components,
     verify_transformers_snapshot,
+)
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmPromptFeatureOutput,
+    VllmResearchInterventionState,
+    VllmResearchRuntime,
+    VllmTeacherForcedOutput,
+)
+from mfh.inference.vllm_runtime import (
+    VllmGenerationOutput,
+    VllmInterventionState,
+    VllmRenderedPrompt,
+    VllmRuntime,
 )
 
 __all__ = [
@@ -34,18 +34,18 @@ __all__ = [
     "HookKey",
     "HookPoint",
     "InterventionPlan",
-    "MlxGenerationOutput",
-    "MlxInterventionState",
-    "MlxPromptFeatureCubeOutput",
-    "MlxPromptFeatureOutput",
-    "MlxRenderedPrompt",
-    "MlxResearchInterventionState",
-    "MlxResearchRuntime",
-    "MlxRuntime",
-    "MlxTeacherForcedOutput",
     "PassPhase",
     "SnapshotFile",
     "SnapshotManifest",
+    "VllmGenerationOutput",
+    "VllmInterventionState",
+    "VllmPromptFeatureCubeOutput",
+    "VllmPromptFeatureOutput",
+    "VllmRenderedPrompt",
+    "VllmResearchInterventionState",
+    "VllmResearchRuntime",
+    "VllmRuntime",
+    "VllmTeacherForcedOutput",
     "load_snapshot_manifest",
     "reject_symlink_path_components",
     "resolve_hook_points",

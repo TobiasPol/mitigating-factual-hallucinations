@@ -21,10 +21,10 @@ from mfh.contracts import (
     Question,
     TokenScope,
 )
-from mfh.data.io import read_questions
 from mfh.errors import DataValidationError, FrozenArtifactError
+from mfh.experiments import e4_baselines as e4_baselines_module
 from mfh.experiments.e2_probes import VerifiedE2ProbeBundle
-from mfh.experiments.e4_act_mlx import (
+from mfh.experiments.e4_act_vllm import (
     _package_e4_act_baseline,
     build_e4_act_baseline,
     verify_e4_act_baseline,
@@ -52,14 +52,14 @@ from mfh.experiments.e4_baselines import (
     write_e4_promotion,
     write_e4_screen_receipt,
 )
-from mfh.experiments.e4_mlx import (
-    E4MlxSetup,
+from mfh.experiments.e4_vllm import (
+    E4VllmSetup,
     _adaptive_record,
     _fixed_record,
     _strict_runtime_arrays,
     _verify_act_controller_replay,
-    run_e4_mlx_screen,
-    verify_e4_mlx_screen,
+    run_e4_vllm_screen,
+    verify_e4_vllm_screen,
 )
 from mfh.experiments.evidence import read_gate_result, write_gate_result
 from mfh.experiments.gates import (
@@ -78,11 +78,11 @@ from mfh.experiments.runner import (
     sign_adaptive_execution_receipt,
 )
 from mfh.experiments.static_direction_sources import resolve_static_direction
-from mfh.inference.mlx_research import (
-    MlxPromptFeatureCubeOutput,
-    MlxResearchInterventionState,
+from mfh.inference.vllm_research import (
+    VllmPromptFeatureCubeOutput,
+    VllmResearchInterventionState,
 )
-from mfh.inference.mlx_runtime import MlxGenerationOutput, MlxRenderedPrompt
+from mfh.inference.vllm_runtime import VllmGenerationOutput, VllmRenderedPrompt
 from mfh.provenance import sha256_path, stable_hash
 from tests.e4_test_artifacts import (
     build_e2_probe_bundle,
@@ -94,10 +94,10 @@ ROOT = Path(__file__).parents[1]
 _EXECUTION_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 _EXECUTION_PUBLIC_KEY = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
 _MODEL_IDENTITY = {
-    "repository": "mlx-community/Qwen3.6-27B-4bit",
-    "revision": "c000ac2c2057d94be3fa931000c31723aac53282",
-    "runtime": "mlx",
-    "quantization": "affine-g64-mlx-4bit",
+    "repository": "nvidia/Qwen3.6-27B-NVFP4",
+    "revision": "0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+    "runtime": "vllm",
+    "quantization": "modelopt-mixed-nvfp4-fp8",
     "num_layers": 64,
 }
 
@@ -117,6 +117,21 @@ def _questions(count: int = 6) -> tuple[Question, ...]:
         )
         for index in range(count)
     )
+
+
+def _scientific_screen(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+    questions = _questions(5_000)
+    monkeypatch.setattr(
+        e4_baselines_module,
+        "_EXPECTED_T_DEV_IDS_DIGEST",
+        stable_hash([value.question_id for value in questions]),
+    )
+    monkeypatch.setattr(
+        e4_baselines_module,
+        "_EXPECTED_T_DEV_QUESTIONS_DIGEST",
+        e4_baselines_module._questions_digest(questions),
+    )
+    return build_e4_screen_receipt(questions, protocol=E4Protocol())
 
 
 def _artifact(root: Path, name: str, value: str) -> Path:
@@ -155,7 +170,7 @@ def _preflight(
     body: dict[str, Any] = {
         "schema_version": 1,
         "method": method,
-        "model_identity": "qwen3.6-27b-mlx-4bit",
+        "model_identity": "qwen3.6-27b-nvfp4",
         "model_runtime_identity": _MODEL_IDENTITY,
         "runtime_artifact_sha256": runtime_sha256,
         "feasibility": feasibility.value,
@@ -238,7 +253,7 @@ def _report(tmp_path: Path) -> E4CapabilityReport:
         for method, value in feasibility.items()
     )
     return build_e4_capability_report(
-        model_identity="qwen3.6-27b-mlx-4bit",
+        model_identity="qwen3.6-27b-nvfp4",
         runtime_identity=_MODEL_IDENTITY,
         runtime_artifact=runtime,
         source_artifacts=sources,
@@ -323,7 +338,7 @@ def _condition(
     prompt: str,
 ) -> EvaluationCondition:
     study = load_study_protocol(ROOT / "configs/experiments/phases.yaml")
-    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml")
+    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml")
     prompt_spec = {
         value.prompt_id: value
         for value in load_prompt_specs(ROOT / "configs/prompts/primary.yaml")
@@ -333,7 +348,7 @@ def _condition(
         phase=ExperimentPhase.E4,
         benchmark="triviaqa",
         partition="T-dev-screen-2000",
-        model_name="qwen3.6-27b-mlx-4bit",
+        model_name="qwen3.6-27b-nvfp4",
         model_repository=model.repository,
         model_revision=model.revision,
         runtime=model.runtime,
@@ -573,11 +588,11 @@ class _NativeE4Runtime:
         question: str,
         *,
         metadata: Any | None = None,
-    ) -> MlxRenderedPrompt:
+    ) -> VllmRenderedPrompt:
         del metadata
         text = f"{prompt.text}\n{question}"
         token_ids = (1, 2, 3)
-        return MlxRenderedPrompt(
+        return VllmRenderedPrompt(
             text=text,
             sha256=hashlib.sha256(text.encode()).hexdigest(),
             token_ids=token_ids,
@@ -586,8 +601,8 @@ class _NativeE4Runtime:
         )
 
     @staticmethod
-    def _generation(rendered: MlxRenderedPrompt) -> MlxGenerationOutput:
-        return MlxGenerationOutput(
+    def _generation(rendered: VllmRenderedPrompt) -> VllmGenerationOutput:
+        return VllmGenerationOutput(
             rendered_prompt=rendered,
             token_ids=(7, 8, 9, 10, 11, 12),
             text="gold",
@@ -604,20 +619,20 @@ class _NativeE4Runtime:
         )
 
     def generate(
-        self, rendered: MlxRenderedPrompt, *, max_new_tokens: int
-    ) -> MlxGenerationOutput:
+        self, rendered: VllmRenderedPrompt, *, max_new_tokens: int
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 48
         return self._generation(rendered)
 
     def generate_with_interventions(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         max_new_tokens: int,
         intervention_states: dict[
-            tuple[int, ActivationSite], MlxResearchInterventionState
+            tuple[int, ActivationSite], VllmResearchInterventionState
         ],
-    ) -> MlxGenerationOutput:
+    ) -> VllmGenerationOutput:
         assert max_new_tokens == 48
         for state in intervention_states.values():
             for index in range(4):
@@ -638,8 +653,8 @@ class _NativeE4Runtime:
         reference_rms: float,
         token_scope: TokenScope,
         decay: float = 0.0,
-    ) -> MlxResearchInterventionState:
-        return MlxResearchInterventionState(
+    ) -> VllmResearchInterventionState:
+        return VllmResearchInterventionState(
             direction=direction,
             alpha=standardized_alpha * reference_rms,
             token_scope=token_scope,
@@ -648,13 +663,13 @@ class _NativeE4Runtime:
 
     def prompt_feature_cube(
         self,
-        rendered: MlxRenderedPrompt,
+        rendered: VllmRenderedPrompt,
         *,
         layers: tuple[int, ...],
         sites: tuple[ActivationSite, ...],
-    ) -> MlxPromptFeatureCubeOutput:
+    ) -> VllmPromptFeatureCubeOutput:
         del rendered
-        return MlxPromptFeatureCubeOutput(
+        return VllmPromptFeatureCubeOutput(
             activations={
                 site: {
                     layer: np.zeros((1, 5_120), dtype=np.float32)
@@ -781,7 +796,7 @@ def test_public_act_builder_rejects_self_declared_miniature_e2(tmp_path: Path) -
 def test_e4_applied_edit_history_rejects_wrong_scale_and_direction() -> None:
     direction = np.zeros(5_120, dtype=np.float32)
     direction[0] = 1.0
-    state = MlxResearchInterventionState(
+    state = VllmResearchInterventionState(
         direction=direction,
         alpha=2.0,
         token_scope=TokenScope.FIRST_FOUR,
@@ -802,7 +817,7 @@ def test_e4_applied_edit_history_rejects_wrong_scale_and_direction() -> None:
 def test_native_e4_run_and_portable_verify_cover_long_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from mfh.experiments import e4_mlx as module
+    from mfh.experiments import e4_vllm as module
 
     report = _report(tmp_path)
     policies, paths = _policies(tmp_path, report)
@@ -856,14 +871,14 @@ def test_native_e4_run_and_portable_verify_cover_long_outputs(
             return stable_hash([value.to_dict() for value in self.values])
 
     ledger = MemoryLedger()
-    setup = E4MlxSetup(
+    setup = E4VllmSetup(
         directory=tmp_path,
         report=report,
         screen=screen,
         policies=MappingProxyType(policies),
         policy_paths=MappingProxyType(paths),
     )
-    monkeypatch.setattr(module, "load_e4_mlx_setup", lambda _path: setup)
+    monkeypatch.setattr(module, "load_e4_vllm_setup", lambda _path: setup)
     monkeypatch.setattr(
         module,
         "PhaseRunLedger",
@@ -887,7 +902,7 @@ def test_native_e4_run_and_portable_verify_cover_long_outputs(
         ),
     }
     with pytest.raises(FrozenArtifactError, match="prompt text"):
-        run_e4_mlx_screen(
+        run_e4_vllm_screen(
             tmp_path,
             tmp_path,
             study=study,
@@ -896,7 +911,7 @@ def test_native_e4_run_and_portable_verify_cover_long_outputs(
             execution_private_key_hex=_EXECUTION_PRIVATE_KEY,
         )
     with pytest.raises(FrozenArtifactError, match="execution key"):
-        run_e4_mlx_screen(
+        run_e4_vllm_screen(
             tmp_path,
             tmp_path,
             study=study,
@@ -907,7 +922,7 @@ def test_native_e4_run_and_portable_verify_cover_long_outputs(
     wrong_identity = dict(runtime.identity)
     wrong_identity["model_revision"] = "0" * 40
     with pytest.raises(FrozenArtifactError, match="scientific M2/E3 runtime"):
-        run_e4_mlx_screen(
+        run_e4_vllm_screen(
             tmp_path,
             tmp_path,
             study=study,
@@ -915,7 +930,7 @@ def test_native_e4_run_and_portable_verify_cover_long_outputs(
             runtime=_NativeE4Runtime(wrong_identity),
             execution_private_key_hex=_EXECUTION_PRIVATE_KEY,
         )
-    partial = run_e4_mlx_screen(
+    partial = run_e4_vllm_screen(
         tmp_path,
         tmp_path,
         study=study,
@@ -927,12 +942,12 @@ def test_native_e4_run_and_portable_verify_cover_long_outputs(
     )
     assert partial["complete"] is False
     assert partial["completed"] == 5
-    assert verify_e4_mlx_screen(
+    assert verify_e4_vllm_screen(
         tmp_path,
         tmp_path,
         study=study,
     )["complete"] is False
-    result = run_e4_mlx_screen(
+    result = run_e4_vllm_screen(
         tmp_path,
         tmp_path,
         study=study,
@@ -944,7 +959,7 @@ def test_native_e4_run_and_portable_verify_cover_long_outputs(
     assert result["complete"] is True
     assert len(ledger.values) == 12
     assert all(value.output_tokens == 6 for value in ledger.values)
-    replay = verify_e4_mlx_screen(
+    replay = verify_e4_vllm_screen(
         tmp_path,
         tmp_path,
         study=study,
@@ -976,10 +991,7 @@ def test_e4_promotion_passes_registered_gate(
 ) -> None:
     report = _report(tmp_path)
     protocol = E4Protocol()
-    dev_questions = tuple(
-        read_questions(ROOT / "artifacts/splits/triviaqa-reviewed/T-dev.jsonl")
-    )
-    screen = build_e4_screen_receipt(dev_questions, protocol=protocol)
+    screen = _scientific_screen(monkeypatch)
     assert screen.scientific_eligible is True
     policies, policy_paths = _policies(tmp_path, report)
     ledger, records = _ledger(
@@ -1134,10 +1146,7 @@ def test_e4_promotion_explicitly_rejects_mandatory_m2_coverage_failure(
 ) -> None:
     report = _report(tmp_path)
     protocol = E4Protocol()
-    screen = build_e4_screen_receipt(
-        tuple(read_questions(ROOT / "artifacts/splits/triviaqa-reviewed/T-dev.jsonl")),
-        protocol=protocol,
-    )
+    screen = _scientific_screen(monkeypatch)
     policies, policy_paths = _policies(tmp_path, report)
     ledger, _ = _ledger(report, policies, policy_paths, screen.screen_question_ids)
     records = tuple(

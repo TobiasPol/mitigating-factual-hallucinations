@@ -119,7 +119,7 @@ def _audit_rows() -> list[dict[str, str]]:
         "simpleqa_verified",
         "aa_omniscience_public_600",
     ):
-        for model in ("qwen3.6-27b-mlx-4bit",):
+        for model in ("qwen3.6-27b-nvfp4",):
             condition_id = f"E9:{benchmark}:{model}:M0:P0"
             for model_index in range(200):
                 adjudicated = "C" if index < 350 else "I"
@@ -401,7 +401,7 @@ def _results(protocol: AnalysisProtocol) -> FinalAnalysisResults:
             },
         },
         runtime_replication={
-            "local_mlx_execution": {
+            "local_vllm_execution": {
                 "passed": True,
                 "record_count": 610,
                 "mean_latency_seconds": 0.01,
@@ -417,15 +417,20 @@ def _results(protocol: AnalysisProtocol) -> FinalAnalysisResults:
                 "runtime_identity_sha256": "9" * 64,
                 "runtime_session_identity_sha256": "9" * 64,
                 "intervention_site_evidence_sha256": "8" * 64,
-                "runtime_counts": {"mlx": 610},
-                "mlx_versions": {"0.31.0": 1},
-                "mlx_lm_versions": {"0.31.3": 1},
-                "machine_models": {"Mac16,7": 1},
-                "chips": {"Apple M4 Max": 1},
-                "operating_systems": {"macOS 15.5": 1},
-                "os_builds": {"24F74": 1},
-                "architectures": {"arm64": 1},
-                "unified_memory_bytes": 48 * 2**30,
+                "runtime_counts": {"vllm": 610},
+                "vllm_versions": {"0.24.0": 1},
+                "torch_versions": {"2.11.0": 1},
+                "transformers_versions": {"5.2.0": 1},
+                "nvidia_drivers": {"570.00": 1},
+                "gpu_models": {"NVIDIA A100-SXM4-40GB": 1},
+                "operating_systems": {"Linux test": 1},
+                "architectures": {"x86_64": 1},
+                "cuda_capabilities": {"8.0": 1},
+                "cuda_runtimes": {"12.9": 1},
+                "quantization_executions": {
+                    "marlin-w4a16-fp8-weight-only-on-sm80": 1
+                },
+                "gpu_total_memory_bytes": 40_000_000_000,
                 "intervention_site_counts": {"no-intervention": 610},
                 "policy_action_counts": {"release": 610},
                 "mean_activation_delta_norm_by_site": {"no-intervention": 0.0},
@@ -567,7 +572,7 @@ def _completion(
 
 def _phase_records(phase: ExperimentPhase) -> tuple[GenerationRecord, ...]:
     repositories = {
-        "qwen3.6-27b-mlx-4bit": "mlx-community/Qwen3.6-27B-4bit",
+        "qwen3.6-27b-nvfp4": "nvidia/Qwen3.6-27B-NVFP4",
     }
     result: list[GenerationRecord] = []
     for index, row in enumerate(_audit_rows()):
@@ -594,7 +599,7 @@ def _phase_records(phase: ExperimentPhase) -> tuple[GenerationRecord, ...]:
                 benchmark=benchmark,
                 model_repository=repositories[row["model"]],
                 model_revision="a" * 40,
-                runtime=Runtime.MLX,
+                runtime=Runtime.VLLM,
                 quantization="synthetic",
                 system_prompt_id="P0-neutral",
                 rendered_prompt_hash="3" * 64,
@@ -627,9 +632,9 @@ def _phase_records(phase: ExperimentPhase) -> tuple[GenerationRecord, ...]:
                 GenerationRecord(
                     question_id=f"language-{index:03d}",
                     benchmark="language_consistency",
-                    model_repository="mlx-community/Qwen3.6-27B-4bit",
+                    model_repository="nvidia/Qwen3.6-27B-NVFP4",
                     model_revision="a" * 40,
-                    runtime=Runtime.MLX,
+                    runtime=Runtime.VLLM,
                     quantization="synthetic",
                     system_prompt_id="P0-neutral",
                     rendered_prompt_hash="4" * 64,
@@ -1104,7 +1109,7 @@ def test_svg_source_ledger_must_remain_visibly_on_canvas(
             "language-confusion-cell",
         ),
         (
-            "local_mlx_runtime_validation",
+            "local_vllm_runtime_validation",
             "runtime-validation-bars",
             "runtime-latency-bar",
         ),

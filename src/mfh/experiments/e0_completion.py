@@ -1,4 +1,4 @@
-"""Scientific E0 promotion after native MLX validation and contamination review."""
+"""Scientific E0 promotion after native VLLM validation and contamination review."""
 
 from __future__ import annotations
 
@@ -14,8 +14,10 @@ from typing import Any
 
 from mfh.data.contamination_review import verify_contamination_review_result
 from mfh.data.io import read_questions
+from mfh.data.reviewed_splits import verify_reviewed_split_bundle
 from mfh.errors import DataValidationError, FrozenArtifactError
-from mfh.experiments.e0_mlx import verify_mlx_e0_bundle
+from mfh.experiments.e0_vllm import verify_vllm_e0_bundle
+from mfh.experiments.grader_bundle import verify_e1_grader_bundle
 from mfh.experiments.model_selection import validate_active_study_artifact_paths
 from mfh.inference.transformers_snapshot import reject_symlink_path_components
 from mfh.provenance import sha256_file, sha256_path, stable_hash
@@ -127,21 +129,25 @@ def _verify_digest(value: Mapping[str, Any], field: str, context: str) -> None:
 
 def _receipt_materials(
     *,
-    mlx_directory: str | Path,
-    expected_mlx_manifest_digest: str,
-    expected_mlx_plan_identity: str,
-    mlx_inputs: Mapping[str, Any],
+    vllm_directory: str | Path,
+    expected_vllm_manifest_digest: str,
+    expected_vllm_plan_identity: str,
+    vllm_inputs: Mapping[str, Any],
     review_result_directory: str | Path,
     expected_review_result_manifest_digest: str,
     review_queue_directory: str | Path,
     expected_review_queue_manifest_digest: str,
     review_inputs: Mapping[str, Any],
+    grader_bundle: str | Path,
+    expected_grader_manifest_digest: str,
+    reviewed_splits: str | Path,
+    expected_reviewed_split_manifest_digest: str,
 ) -> dict[str, Any]:
-    mlx_manifest = verify_mlx_e0_bundle(
-        mlx_directory,
-        expected_manifest_digest=expected_mlx_manifest_digest,
-        expected_plan_identity=expected_mlx_plan_identity,
-        **mlx_inputs,
+    vllm_manifest = verify_vllm_e0_bundle(
+        vllm_directory,
+        expected_manifest_digest=expected_vllm_manifest_digest,
+        expected_plan_identity=expected_vllm_plan_identity,
+        **vllm_inputs,
     )
     review_manifest = verify_contamination_review_result(
         review_result_directory,
@@ -150,22 +156,36 @@ def _receipt_materials(
         expected_review_queue_manifest_digest=expected_review_queue_manifest_digest,
         **review_inputs,
     )
-    mlx_status = mlx_manifest.get("scientific_status")
+    grader_manifest = verify_e1_grader_bundle(
+        grader_bundle,
+        expected_manifest_digest=expected_grader_manifest_digest,
+        verify_live_sources=True,
+    )
+    verify_reviewed_split_bundle(
+        reviewed_splits,
+        expected_manifest_digest=expected_reviewed_split_manifest_digest,
+        review_result_directory=review_result_directory,
+        expected_review_result_manifest_digest=expected_review_result_manifest_digest,
+        review_queue_directory=review_queue_directory,
+        expected_review_queue_manifest_digest=expected_review_queue_manifest_digest,
+        review_inputs=review_inputs,
+    )
+    vllm_status = vllm_manifest.get("scientific_status")
     if (
-        not isinstance(mlx_status, Mapping)
-        or mlx_status.get("e0_runtime_validation_complete") is not True
+        not isinstance(vllm_status, Mapping)
+        or vllm_status.get("e0_runtime_validation_complete") is not True
     ):
-        raise DataValidationError("E0 MLX bundle does not complete runtime validation")
+        raise DataValidationError("E0 VLLM bundle does not complete runtime validation")
     if (
         review_manifest.get("status") != "complete"
         or review_manifest.get("scientific_eligible") is not True
     ):
         raise DataValidationError("semantic-contamination review is not scientifically complete")
 
-    cohort_directory = mlx_inputs.get("cohort_directory")
-    expected_cohort_digest = mlx_inputs.get("expected_cohort_manifest_digest")
+    cohort_directory = vllm_inputs.get("cohort_directory")
+    expected_cohort_digest = vllm_inputs.get("expected_cohort_manifest_digest")
     if cohort_directory is None or type(expected_cohort_digest) is not str:
-        raise DataValidationError("E0 MLX inputs lack the anchored cohort")
+        raise DataValidationError("E0 VLLM inputs lack the anchored cohort")
     _require_sha256(expected_cohort_digest, "E0 cohort manifest")
     questions = tuple(read_questions(Path(cohort_directory) / "questions.jsonl"))
     if len(questions) != 500:
@@ -189,16 +209,21 @@ def _receipt_materials(
         )
 
     body: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "phase": "E0",
         "scope": "scientific-runtime-validation-after-manual-contamination-review",
         "source_manifests": {
-            "mlx_runtime": expected_mlx_manifest_digest,
+            "vllm_runtime": expected_vllm_manifest_digest,
             "contamination_review": expected_review_result_manifest_digest,
             "contamination_review_queue": expected_review_queue_manifest_digest,
             "runtime_validation_cohort": expected_cohort_digest,
+            "e1_grader_bundle": expected_grader_manifest_digest,
+            "reviewed_splits": expected_reviewed_split_manifest_digest,
         },
-        "mlx_plan_identity": expected_mlx_plan_identity,
+        "grader_bundle_sha256": sha256_path(grader_bundle),
+        "reviewed_splits_sha256": sha256_path(reviewed_splits),
+        "grader_fingerprints": grader_manifest["grader_fingerprints"],
+        "vllm_plan_identity": expected_vllm_plan_identity,
         "review_counts": review_manifest["counts"],
         "cohort_assessment": {
             "question_count": len(cohort_ids),
@@ -218,37 +243,54 @@ def _receipt_materials(
 def write_e0_completion_receipt(
     directory: str | Path,
     *,
-    mlx_directory: str | Path,
-    expected_mlx_manifest_digest: str,
-    expected_mlx_plan_identity: str,
-    mlx_inputs: Mapping[str, Any],
+    vllm_directory: str | Path,
+    expected_vllm_manifest_digest: str,
+    expected_vllm_plan_identity: str,
+    vllm_inputs: Mapping[str, Any],
     review_result_directory: str | Path,
     expected_review_result_manifest_digest: str,
     review_queue_directory: str | Path,
     expected_review_queue_manifest_digest: str,
     review_inputs: Mapping[str, Any],
+    grader_bundle: str | Path,
+    expected_grader_manifest_digest: str,
+    reviewed_splits: str | Path,
+    expected_reviewed_split_manifest_digest: str,
 ) -> Mapping[str, Any]:
     """Publish E0 promotion evidence only after replaying all prerequisite artifacts."""
 
     validated_paths = validate_active_study_artifact_paths(
-        {"E0 completion receipt": directory, "E0 MLX bundle": mlx_directory}
+        {
+            "E0 completion receipt": directory,
+            "E0 VLLM bundle": vllm_directory,
+            "E1 grader bundle": grader_bundle,
+            "reviewed splits": reviewed_splits,
+        }
     )
     directory = validated_paths["E0 completion receipt"]
-    mlx_directory = validated_paths["E0 MLX bundle"]
-    _require_sha256(expected_mlx_manifest_digest, "E0 MLX manifest")
-    _require_sha256(expected_mlx_plan_identity, "E0 MLX plan")
+    vllm_directory = validated_paths["E0 VLLM bundle"]
+    grader_bundle = validated_paths["E1 grader bundle"]
+    reviewed_splits = validated_paths["reviewed splits"]
+    _require_sha256(expected_vllm_manifest_digest, "E0 VLLM manifest")
+    _require_sha256(expected_vllm_plan_identity, "E0 VLLM plan")
     _require_sha256(expected_review_result_manifest_digest, "contamination review result")
     _require_sha256(expected_review_queue_manifest_digest, "contamination review queue")
+    _require_sha256(expected_grader_manifest_digest, "E1 grader-bundle manifest")
+    _require_sha256(expected_reviewed_split_manifest_digest, "reviewed split manifest")
     receipt = _receipt_materials(
-        mlx_directory=mlx_directory,
-        expected_mlx_manifest_digest=expected_mlx_manifest_digest,
-        expected_mlx_plan_identity=expected_mlx_plan_identity,
-        mlx_inputs=mlx_inputs,
+        vllm_directory=vllm_directory,
+        expected_vllm_manifest_digest=expected_vllm_manifest_digest,
+        expected_vllm_plan_identity=expected_vllm_plan_identity,
+        vllm_inputs=vllm_inputs,
         review_result_directory=review_result_directory,
         expected_review_result_manifest_digest=expected_review_result_manifest_digest,
         review_queue_directory=review_queue_directory,
         expected_review_queue_manifest_digest=expected_review_queue_manifest_digest,
         review_inputs=review_inputs,
+        grader_bundle=grader_bundle,
+        expected_grader_manifest_digest=expected_grader_manifest_digest,
+        reviewed_splits=reviewed_splits,
+        expected_reviewed_split_manifest_digest=expected_reviewed_split_manifest_digest,
     )
     output = reject_symlink_path_components(directory, "E0 completion receipt output")
     if output.exists():
@@ -258,7 +300,7 @@ def write_e0_completion_receipt(
     try:
         _write_json_once(stage / "receipt.json", receipt)
         body: dict[str, Any] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "phase": "E0",
             "purpose": "scientific-e0-completion-receipt",
             "receipt_digest": receipt["receipt_digest"],
@@ -275,15 +317,19 @@ def write_e0_completion_receipt(
     return verify_e0_completion_receipt(
         output,
         expected_manifest_digest=str(manifest["manifest_digest"]),
-        mlx_directory=mlx_directory,
-        expected_mlx_manifest_digest=expected_mlx_manifest_digest,
-        expected_mlx_plan_identity=expected_mlx_plan_identity,
-        mlx_inputs=mlx_inputs,
+        vllm_directory=vllm_directory,
+        expected_vllm_manifest_digest=expected_vllm_manifest_digest,
+        expected_vllm_plan_identity=expected_vllm_plan_identity,
+        vllm_inputs=vllm_inputs,
         review_result_directory=review_result_directory,
         expected_review_result_manifest_digest=expected_review_result_manifest_digest,
         review_queue_directory=review_queue_directory,
         expected_review_queue_manifest_digest=expected_review_queue_manifest_digest,
         review_inputs=review_inputs,
+        grader_bundle=grader_bundle,
+        expected_grader_manifest_digest=expected_grader_manifest_digest,
+        reviewed_splits=reviewed_splits,
+        expected_reviewed_split_manifest_digest=expected_reviewed_split_manifest_digest,
     )
 
 
@@ -291,29 +337,39 @@ def verify_e0_completion_receipt(
     directory: str | Path,
     *,
     expected_manifest_digest: str,
-    mlx_directory: str | Path,
-    expected_mlx_manifest_digest: str,
-    expected_mlx_plan_identity: str,
-    mlx_inputs: Mapping[str, Any],
+    vllm_directory: str | Path,
+    expected_vllm_manifest_digest: str,
+    expected_vllm_plan_identity: str,
+    vllm_inputs: Mapping[str, Any],
     review_result_directory: str | Path,
     expected_review_result_manifest_digest: str,
     review_queue_directory: str | Path,
     expected_review_queue_manifest_digest: str,
     review_inputs: Mapping[str, Any],
+    grader_bundle: str | Path,
+    expected_grader_manifest_digest: str,
+    reviewed_splits: str | Path,
+    expected_reviewed_split_manifest_digest: str,
 ) -> Mapping[str, Any]:
     """Replay an E0 completion receipt against its live, externally anchored evidence."""
 
     _require_sha256(expected_manifest_digest, "E0 completion receipt manifest")
+    _require_sha256(expected_grader_manifest_digest, "E1 grader-bundle manifest")
+    _require_sha256(expected_reviewed_split_manifest_digest, "reviewed split manifest")
     expected_receipt = _receipt_materials(
-        mlx_directory=mlx_directory,
-        expected_mlx_manifest_digest=expected_mlx_manifest_digest,
-        expected_mlx_plan_identity=expected_mlx_plan_identity,
-        mlx_inputs=mlx_inputs,
+        vllm_directory=vllm_directory,
+        expected_vllm_manifest_digest=expected_vllm_manifest_digest,
+        expected_vllm_plan_identity=expected_vllm_plan_identity,
+        vllm_inputs=vllm_inputs,
         review_result_directory=review_result_directory,
         expected_review_result_manifest_digest=expected_review_result_manifest_digest,
         review_queue_directory=review_queue_directory,
         expected_review_queue_manifest_digest=expected_review_queue_manifest_digest,
         review_inputs=review_inputs,
+        grader_bundle=grader_bundle,
+        expected_grader_manifest_digest=expected_grader_manifest_digest,
+        reviewed_splits=reviewed_splits,
+        expected_reviewed_split_manifest_digest=expected_reviewed_split_manifest_digest,
     )
     root = _verify_inventory(directory)
     receipt = _read_json(root / "receipt.json", "E0 completion receipt")
@@ -323,7 +379,7 @@ def verify_e0_completion_receipt(
     manifest = _read_json(root / "manifest.json", "E0 completion receipt manifest")
     _verify_digest(manifest, "manifest_digest", "E0 completion receipt manifest")
     expected_body = {
-        "schema_version": 1,
+        "schema_version": 2,
         "phase": "E0",
         "purpose": "scientific-e0-completion-receipt",
         "receipt_digest": expected_receipt["receipt_digest"],
@@ -342,15 +398,19 @@ def authorize_e0_completion_receipt(
     directory: str | Path,
     *,
     expected_manifest_digest: str,
-    mlx_directory: str | Path,
-    expected_mlx_manifest_digest: str,
-    expected_mlx_plan_identity: str,
-    mlx_inputs: Mapping[str, Any],
+    vllm_directory: str | Path,
+    expected_vllm_manifest_digest: str,
+    expected_vllm_plan_identity: str,
+    vllm_inputs: Mapping[str, Any],
     review_result_directory: str | Path,
     expected_review_result_manifest_digest: str,
     review_queue_directory: str | Path,
     expected_review_queue_manifest_digest: str,
     review_inputs: Mapping[str, Any],
+    grader_bundle: str | Path,
+    expected_grader_manifest_digest: str,
+    reviewed_splits: str | Path,
+    expected_reviewed_split_manifest_digest: str,
 ) -> VerifiedE0CompletionReceipt:
     """Issue the only receipt capability accepted by scientific E0 finalization."""
 
@@ -358,15 +418,19 @@ def authorize_e0_completion_receipt(
     manifest = verify_e0_completion_receipt(
         root,
         expected_manifest_digest=expected_manifest_digest,
-        mlx_directory=mlx_directory,
-        expected_mlx_manifest_digest=expected_mlx_manifest_digest,
-        expected_mlx_plan_identity=expected_mlx_plan_identity,
-        mlx_inputs=mlx_inputs,
+        vllm_directory=vllm_directory,
+        expected_vllm_manifest_digest=expected_vllm_manifest_digest,
+        expected_vllm_plan_identity=expected_vllm_plan_identity,
+        vllm_inputs=vllm_inputs,
         review_result_directory=review_result_directory,
         expected_review_result_manifest_digest=expected_review_result_manifest_digest,
         review_queue_directory=review_queue_directory,
         expected_review_queue_manifest_digest=expected_review_queue_manifest_digest,
         review_inputs=review_inputs,
+        grader_bundle=grader_bundle,
+        expected_grader_manifest_digest=expected_grader_manifest_digest,
+        reviewed_splits=reviewed_splits,
+        expected_reviewed_split_manifest_digest=expected_reviewed_split_manifest_digest,
     )
     fingerprint = sha256_path(root)
     manifest_digest = str(manifest["manifest_digest"])
@@ -397,7 +461,7 @@ def validate_e0_completion_receipt_snapshot(directory: str | Path) -> Mapping[st
     receipt = _read_json(root / "receipt.json", "E0 completion receipt")
     _verify_digest(receipt, "receipt_digest", "E0 completion receipt")
     if (
-        receipt.get("schema_version") != 1
+        receipt.get("schema_version") != 2
         or receipt.get("phase") != "E0"
         or receipt.get("status") != "complete"
         or receipt.get("scientific_eligible") is not True
@@ -407,20 +471,34 @@ def validate_e0_completion_receipt_snapshot(directory: str | Path) -> Mapping[st
         raise DataValidationError("E0 completion receipt is not eligible for E1 admission")
     manifests = receipt.get("source_manifests")
     if not isinstance(manifests, Mapping) or set(manifests) != {
-        "mlx_runtime",
+        "vllm_runtime",
         "contamination_review",
         "contamination_review_queue",
         "runtime_validation_cohort",
+        "e1_grader_bundle",
+        "reviewed_splits",
     }:
         raise DataValidationError("E0 completion receipt source identities differ")
     for name, digest in manifests.items():
         if type(digest) is not str:
             raise DataValidationError(f"E0 completion source {name} is invalid")
         _require_sha256(digest, f"E0 completion source {name}")
+    for name in ("grader_bundle_sha256", "reviewed_splits_sha256"):
+        digest = receipt.get(name)
+        if type(digest) is not str:
+            raise DataValidationError(f"E0 completion {name} is invalid")
+        _require_sha256(digest, f"E0 completion {name}")
+    grader_fingerprints = receipt.get("grader_fingerprints")
+    if not isinstance(grader_fingerprints, Mapping) or not grader_fingerprints:
+        raise DataValidationError("E0 completion grader fingerprints are invalid")
+    for name, digest in grader_fingerprints.items():
+        if type(name) is not str or type(digest) is not str:
+            raise DataValidationError("E0 completion grader fingerprint is invalid")
+        _require_sha256(digest, f"E0 completion grader {name}")
     manifest = _read_json(root / "manifest.json", "E0 completion receipt manifest")
     _verify_digest(manifest, "manifest_digest", "E0 completion receipt manifest")
     expected_body = {
-        "schema_version": 1,
+        "schema_version": 2,
         "phase": "E0",
         "purpose": "scientific-e0-completion-receipt",
         "receipt_digest": receipt["receipt_digest"],

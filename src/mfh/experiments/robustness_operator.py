@@ -42,7 +42,7 @@ from mfh.experiments.e5_capture import (
     verify_e5_fit_capture,
 )
 from mfh.experiments.e5_layer_labels import load_e5_layer_label_data
-from mfh.experiments.e9_native import NativeE9MlxBackend
+from mfh.experiments.e9_native import NativeE9VllmBackend
 from mfh.experiments.model_selection import validate_active_study_artifact_paths
 from mfh.experiments.robustness_diagnostics import (
     RQ1GeneralizationTask,
@@ -325,14 +325,14 @@ def _backend(
     *,
     execution_private_key: str,
     openrouter_api_key: str,
-) -> tuple[NativeE9MlxBackend, Any]:
+) -> tuple[NativeE9VllmBackend, Any]:
     grader = _source_path(store, "frozen-graders")
     attestor, runtime_artifact = _native_runtime(
         runbook,
         execution_private_key=execution_private_key,
         packaged_grader=grader,
     )
-    backend = NativeE9MlxBackend(
+    backend = NativeE9VllmBackend(
         attestor=attestor,
         runtime_artifact=runtime_artifact,
         grader_bundle=grader,
@@ -694,7 +694,7 @@ def _run_one_rq1(
     controller_calibration: ProbeDataset,
     labels: Mapping[str, int],
     private_key: str,
-    backend: NativeE9MlxBackend,
+    backend: NativeE9VllmBackend,
 ) -> None:
     store = context.store
     questions = rq1_task_question_sets(store.plan, task)

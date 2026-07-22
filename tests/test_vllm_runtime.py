@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from mfh.config import load_model_spec, load_prompt_specs
-from mfh.inference.mlx_runtime import MlxRuntime, _completed_short_answer, as_numpy
+from mfh.inference.vllm_runtime import VllmRuntime, _completed_short_answer, as_numpy
 
 ROOT = Path(__file__).parents[1]
 
@@ -18,19 +18,20 @@ class _Tokenizer:
         return [7, 11, 13] if tokenize else "<system>system</system><user>question</user>"
 
 
-class _Model:
-    def __init__(self) -> None:
-        self.layers = [object() for _ in range(64)]
+class _BatchEncodingTokenizer(_Tokenizer):
+    def apply_chat_template(self, messages, *, tokenize: bool, **kwargs):  # type: ignore[no-untyped-def]
+        rendered = super().apply_chat_template(messages, tokenize=tokenize, **kwargs)
+        return {"input_ids": rendered, "attention_mask": [1, 1, 1]} if tokenize else rendered
 
 
-def test_mlx_runtime_renders_official_template_with_frozen_tokens() -> None:
-    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-mlx-4bit.yaml")
+def test_vllm_runtime_renders_official_template_with_frozen_tokens() -> None:
+    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml")
     prompt = {
         value.prompt_id: value
         for value in load_prompt_specs(ROOT / "configs/prompts/primary.yaml")
     }["P0-neutral"]
-    runtime = MlxRuntime(
-        model=_Model(),
+    runtime = VllmRuntime(
+        engine=None,
         tokenizer=_Tokenizer(),
         model_spec=model,
         snapshot=ROOT,
@@ -42,6 +43,24 @@ def test_mlx_runtime_renders_official_template_with_frozen_tokens() -> None:
     assert len(rendered.sha256) == 64
     assert len(rendered.token_ids_sha256) == 64
     assert tuple(value["role"] for value in rendered.messages) == ("system", "user")
+
+
+def test_vllm_runtime_accepts_transformers_batch_encoding() -> None:
+    model = load_model_spec(ROOT / "configs/models/qwen3.6-27b-nvfp4.yaml")
+    prompt = {
+        value.prompt_id: value
+        for value in load_prompt_specs(ROOT / "configs/prompts/primary.yaml")
+    }["P0-neutral"]
+    runtime = VllmRuntime(
+        engine=None,
+        tokenizer=_BatchEncodingTokenizer(),
+        model_spec=model,
+        snapshot=ROOT,
+    )
+
+    rendered = runtime.render_prompt(prompt, "What is the capital of France?")
+
+    assert rendered.token_ids == (7, 11, 13)
 
 
 def test_short_answer_stop_uses_first_sentence_or_line() -> None:
